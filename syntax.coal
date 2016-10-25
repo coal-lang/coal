@@ -38,5 +38,5 @@ let helloWorld: String = 'Hello, world!' # This calls `init` without named argum
 [print: helloWorld]
 # -> Hello, world!
 
-[print [helloWorld stringAfterReplacing: 'world' with: 'John']]
+[print: [helloWorld stringAfterReplacing: 'world' with: 'John']]
 # -> Hello, John!
