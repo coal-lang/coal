@@ -1,0 +1,11 @@
+let fruits: List = ("Apple", "Banana")
+let more_fruits: List = (fruits, "Cocoa", "Melon", "Peach")
+let bla_bla: List = (0, 1, more_fruits)
+let index: Int = 2
+
+[print: fruits]
+[print: fruits{1}]
+
+[print: more_fruits]
+[print: more_fruits{0}]
+[print: more_fruits{0}{1}]

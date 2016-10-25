@@ -1,0 +1,42 @@
+# Built-in code:
+class String ->
+    init (String value) -> String
+        [this string: value]
+
+    init fromBytes:(Bytes bytes) withEncoding:(String encoding) -> String
+        [this string: [bytes toStringWithEncoding: encoding]]
+
+    init fromCharacters:(List chars) -> String
+        foreach chars -> char
+            [[this string] concat: char]
+
+    init fromString:(String string) -> String
+        [this string: [string string]]
+
+    repr -> String
+        return [this string]
+
+    public ->
+        let string: String
+        let length: Int
+
+        def toList -> List
+            return [[this string] toList]
+
+        def stringAfterTrimming:(String value) -> String
+            return [[this string] trim: value]
+
+        def stringAfterReplacing:(String initial) with:(String final) -> String
+            return [[this string] replace: initial with: final]
+
+        # ... #
+
+let helloWorld: String = 'Hello, world!' # This calls `init` without named arguments (first definition above)
+
+# `print` always tries to represent arguments as a String
+
+[print: helloWorld]
+# -> Hello, world!
+
+[print [helloWorld stringAfterReplacing: 'world' with: 'John']]
+# -> Hello, John!
