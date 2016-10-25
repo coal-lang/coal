@@ -4,7 +4,7 @@
  # Stove
  # Coal interpreter prototype
  #
- # author William "0x77" F.
+ # author William "10c8" F.
  # version 0.2
  # copyright MIT
 ##
@@ -15,7 +15,6 @@ import collections
 import ply.yacc as yacc
 
 import lexer
-
 from CoalObject import Object, Void, Builtins, Int, Float, String, List
 
 
