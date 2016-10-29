@@ -1,11 +1,10 @@
-#!/usr/env/bin python
 #: vim set encoding=utf-8 :
 ##
  # Stove
  # Coal interpreter prototype
  #
  # Module: Lexer
- # version 0.2
+ # version 0.3
 ##
 
 # Imports
@@ -19,7 +18,8 @@ reserved = {
 
     # Variables and functions
     'let': 'VAR_DEF',
-    'def': 'FUNC_DEF',
+    'def': 'DEF',
+    'end': 'END',
     'return': 'FUNC_RET',
 
     # Classes
@@ -40,26 +40,30 @@ reserved = {
     'elif': 'COND_ELIF',
     'else': 'COND_ELSE',
     'try': 'COND_TRY',
-    'except': 'COND_EXC'
+    'except': 'COND_EXC',
+
+    # Booleans
+    'true': 'TRUE',
+    'false': 'FALSE'
 }
 
 # Tokens
 tokens = (
-    'WITH', 'AS', 'ASK',
-    'COMMA', 'EQUALS', 'NOT_EQUAL',
-    'LPAREN', 'RPAREN',
-    'LBRACKET', 'RBRACKET',
-    'LSBRACKET', 'RSBRACKET',
+    'WITH', 'AS', 'ASK', 'NEWLINE',
+    'SPACE', 'COMMA', 'EQUALS', 'BAR', 'NOT_EQUAL', 'PERCENT',
+    'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LSQB', 'RSQB',
     'TYPE_NAME',
 )
 
 complex = (
+    'VOID',
     'INT',
     'FLOAT',
     'STRING',
     'LIST',
     'OBJECT',
     'NAME',
+    'INDENT', 'DEDENT',
 )
 
 tokens += tuple(reserved.values())
@@ -71,14 +75,40 @@ t_AS = r'->'
 t_ASK = r'\?'
 t_COMMA = r','
 t_EQUALS = r'\='
+t_BAR = r'\|'
 t_NOT_EQUAL = r'\!\='
-t_LPAREN = r'\('
-t_RPAREN = r'\)'
-t_LBRACKET = r'\{'
-t_RBRACKET = r'\}'
-t_LSBRACKET = r'\['
-t_RSBRACKET = r'\]'
+t_PERCENT = r'\%'
+t_LBRACE = r'\{'
+t_RBRACE = r'\}'
 t_TYPE_NAME = r'\b[A-Z][a-zA-Z]+'
+
+
+def t_LPAREN(t):
+    r'\('
+
+    # t.lexer.paren_count += 1
+    return t
+
+
+def t_RPAREN(t):
+    r'\)'
+
+    # t.lexer.paren_count -= 1
+    return t
+
+
+def t_LSQB(t):
+    r'\['
+
+    # t.lexer.bracket_count += 1
+    return t
+
+
+def t_RSQB(t):
+    r'\]'
+
+    # t.lexer.bracket_count -= 1
+    return t
 
 
 # Complex tokens
@@ -101,30 +131,10 @@ def t_INT(t):
 # Read in a string
 def t_STRING(t):
     # r'([\'"]).+?\1'
-    r'\"([^\\"]|(\\.))*\"'
+    # r'\"([^\\"]|(\\.))*\"'
+    r'"([^\\"]+|\\"|\\n|\\\\)*"'
 
-    escaped = 0
-    str = t.value[1:-1]
-    new_str = ""
-
-    for i in range(0, len(str)):
-        c = str[i]
-
-        if escaped:
-            if c == "n":
-                c = "\n"
-            elif c == "t":
-                c = "\t"
-
-            new_str += c
-            escaped = 0
-        else:
-            if c == "\\":
-                escaped = 1
-            else:
-                new_str += c
-
-    t.value = new_str
+    t.value = bytes(t.value[1:-1], 'utf-8').decode('unicode-escape')
     return t
 
 
@@ -132,23 +142,38 @@ def t_NAME(t):
     r'[a-z_][a-zA-Z_]+'
 
     if t.value in reserved:
-        t.type = reserved.get(t.value, 'ID')
+        t.type = reserved[t.value]
     else:
         t.type = 'NAME'
 
     return t
 
 
+# Ignore comments
+def t_comment(t):
+    r'[ ]*//[^\n]*'
+    pass
+
+
+# Significant whitespace (indent)
+# def t_SPACE(t):
+    # r' [ ]+ '
+
+    # if t.lexer.at_line_start and t.lexer.paren_count == 0:
+    #     return t
+
+
 # Track line numbers
 def t_newline(t):
     r'\n+'
+
     t.lexer.lineno += len(t.value)
+    # t.type = 'NEWLINE'
 
+    # return t
 
-# Ignore comments
-def t_comment(t):
-    r'//[^\n]*'
-    pass
+    # if t.lexer.paren_count == 0:
+    #     return t
 
 
 # Ignore spaces and tabs
@@ -161,5 +186,176 @@ def t_error(t):
     t.lexer.skip(1)
 
 
-# Build the lexer
 lexer = lex.lex()
+
+# Indentation (WIP)
+NO_INDENT = 0
+MAY_INDENT = 1
+MUST_INDENT = 2
+
+
+def filtr(lexer):
+    token = None
+    tokens = iter(lexer.token, None)
+    tokens = track_tokens_filter(lexer, tokens)
+
+    for token in indentation_filter(tokens):
+        yield token
+
+
+class IndentLexer(object):
+    def __init__(self, debug=0, optimize=0, lextab='lextab', reflags=0):
+        self.lexer = lex.lex(debug=debug,
+                             optimize=optimize,
+                             lextab=lextab,
+                             reflags=reflags)
+        self.token_stream = None
+
+    def input(self, s):
+        self.lexer.paren_count = 0
+        self.lexer.input(s)
+        self.token_stream = filtr(self.lexer)
+
+    def token(self):
+        try:
+            return self.token_stream.__next__()
+        except StopIteration:
+            return None
+
+
+# only care about whitespace at the start of a line
+def track_tokens_filter(lexer, tokens):
+    lexer.at_line_start = at_line_start = True
+    indent = NO_INDENT
+
+    # for token in tokens:
+    tokens = list(tokens)
+    print(tokens)
+
+    for i, token in enumerate(tokens):
+        token.at_line_start = at_line_start
+        print(token, token.at_line_start)
+
+        if token.type == "AS":
+            if tokens[i+1].type == "NAME_TYPE"\
+               or tokens[i+1].type == "NAME":
+                at_line_start = False
+                indent = MUST_INDENT
+                token.must_indent = False
+        # elif token.type == "NEWLINE":
+        #     at_line_start = True
+
+        #     if indent == MAY_INDENT:
+        #         indent = MUST_INDENT
+
+        #     token.must_indent = False
+        elif token.type == "SPACE":
+            assert token.at_line_start is True
+
+            at_line_start = True
+            token.must_indent = False
+        else:
+            # A real token
+            if indent == MUST_INDENT:
+                token.must_indent = True
+            else:
+                token.must_indent = False
+
+            at_line_start = False
+            indent = NO_INDENT
+
+        yield token
+        lexer.at_line_start = at_line_start
+
+
+def _new_token(type, lineno):
+    tok = lex.LexToken()
+    tok.type = type
+    tok.value = None
+    tok.lineno = lineno
+
+    return tok
+
+
+# Synthesize a DEDENT tag
+def DEDENT(lineno):
+    return _new_token("DEDENT", lineno)
+
+
+# Synthesize an INDENT tag
+def INDENT(lineno):
+    return _new_token("INDENT", lineno)
+
+
+# Track the indentation level and emit the right INDENT / DEDENT events.
+def indentation_filter(tokens):
+    # A stack of indentation levels; will never pop item 0
+    levels = [0]
+    token = None
+    depth = 0
+    prev_was_SPACE = False
+
+    for token in tokens:
+        # SPACE only occurs at the start of the line
+        # There may be SPACE followed by NEWLINE so
+        # only track the depth here.  Don't indent/dedent
+        # until there's something real.
+
+        if token.type == "SPACE":
+            assert depth == 0
+
+            depth = len(token.value)
+            prev_was_SPACE = True
+
+            # SPACE tokens are never passed to the parser
+            continue
+
+        if token.type == "NEWLINE":
+            depth = 0
+
+            if prev_was_SPACE or token.at_line_start:
+                # ignore blank lines
+                continue
+
+            # pass the other cases on through
+            yield token
+            continue
+
+        # then it must be a real token (not SPACE, not NEWLINE)
+        # which can affect the indentation levels
+
+        prev_was_SPACE = False
+        if token.must_indent:
+            # The current depth must be larger than the previous level
+            if not (depth > levels[-1]):
+                raise IndentationError("expected an indented block")
+
+            levels.append(depth)
+            yield INDENT(token.lineno)
+        elif token.at_line_start:
+            # Must be on the same level or one of the previous levels
+            if depth == levels[-1]:
+                # At the same level
+                pass
+            elif depth > levels[-1]:
+                raise IndentationError("indentation increase but not in new block")
+            else:
+                # Back up; but only if it matches a previous level
+                try:
+                    i = levels.index(depth)
+                except ValueError:
+                    raise IndentationError("inconsistent indentation")
+
+                for _ in range(i+1, len(levels)):
+                    yield DEDENT(token.lineno)
+                    levels.pop()
+
+        yield token
+
+    # Finished processing!
+    # Must dedent any remaining levels
+    if len(levels) > 1:
+        assert token is not None
+
+        for _ in range(1, len(levels)):
+            yield DEDENT(token.lineno)

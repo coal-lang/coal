@@ -1,11 +1,10 @@
-#!/usr/env/bin python
 #: vim set encoding=utf-8 :
 ##
  # Stove
  # Coal interpreter prototype
  #
  # Module: Built-in Objects
- # version 0.1
+ # version 0.2
 ##
 
 # Imports
@@ -51,19 +50,14 @@ class Object(object):
             'Raw': lambda: String(self.value)
         }
 
-    def call(self, name, arg=None, kwargs=None):
-        if name in self.methods:
-            if arg is None:
-                return getattr(self, '_method_{}'.format(name))()
-            elif kwargs is None:
-                return getattr(self, '_method_{}'.format(name))(arg)
-            else:
-                return getattr(self, '_method_{}'.format(name))(arg, kwargs)
-        elif name in self.attributes:
-            return self.attributes[name]
+    def call(self, selectors, args):
+        if selectors in self.methods:
+            return getattr(self, '_method_{}'.format(selectors))(*args)
+        elif selectors in self.attributes:
+            return self.attributes[selectors]
         else:
             throwMethodError('"{}" object has no method/attribute "{}".'
-                             .format(type(self).__name__, name))
+                             .format(type(self).__name__, selectors))
             sys.exit(1)
 
     def repr(self, as_type):
@@ -72,55 +66,48 @@ class Object(object):
 
 # Void
 class Void(Object):
-    def __init__(self, of_type=None):
+    def __init__(self, of_type=None, obj_type=None):
         if of_type is None:
-            super(self.__class__, self).__init__('Void', 'void', 'Void')
+            if obj_type is not None:
+                super(self.__class__, self).__init__('Void', 'void', obj_type)
+            else:
+                super(self.__class__, self).__init__('Void', 'void', 'Void')
         else:
             super(self.__class__, self).__init__('Void',
                                                  'void',
-                                                 of_type.obj_type)
+                                                 of_type.object_type)
 
         self.repr_as = {
             'String': lambda: String('Void({})'.format(self.value))
         }
 
 
-# Builtins!
-class _Builtins(Object):
-    methods = [
-        'print',
-        'chr',
-        'ord'
-    ]
+class Bool(Object):
+    def __init__(self, value, obj_type=None):
+        try:
+            if value == 'true':
+                boole = True
+            else:
+                boole = False
 
-    def __init__(self):
-        super(self.__class__, self).__init__('Builtins', None, None)
+            super(self.__class__, self).__init__('Bool',
+                                                 value,
+                                                 boole)
 
-    def _method_print(self, arg):
-        _value = arg
+            self.repr_as = {
+                'String': lambda: String('Bool({})'.format(self.value))
+            }
+        except:
+            throwTypeError('Bool', obj_type)
 
-        if isinstance(_value, String):
-            print(_value.value)
-        else:
-            print(_value.repr('String').value)
 
-    def _method_chr(self, arg):
-        _value = arg
+# Function
+class Function(object):
+    def __init__(self, code):
+        self.code = code
 
-        if isinstance(_value, Int):
-            return String(chr(_value.value))
-        else:
-            throwError('TypeError: Built-in method "chr" takes "Int".')
-
-    def _method_ord(self, arg):
-        _value = arg
-
-        if isinstance(_value, String):
-            return Int(ord(_value.value))
-        else:
-            throwError('TypeError: Built-in method "ord" takes "String".')
-
-Builtins = _Builtins()
+    def __call__(self, *args):
+        pass
 
 
 # Integer
@@ -148,11 +135,12 @@ class Float(Object):
 # String
 class String(Object):
     methods = [
-        'concat',
-        'stringToUppercase',
-        'stringToLowercase',
-        'stringAfterReplacing',
-        'stringAfterTrimming'
+        'concat_',
+        'stringToUppercase_',
+        'stringToLowercase_',
+        'stringAfterReplacing_with_',
+        'stringAfterReplacing_with_times_'
+        'stringAfterTrimming_'
     ]
 
     def __init__(self, value, obj_type=None):
@@ -169,39 +157,38 @@ class String(Object):
         except:
             throwTypeError('String', obj_type)
 
-    def _method_concat(self, arg):
+    def iter(self, start, end=None):
+        try:
+            if end is None:
+                return String(self.value[start])
+            else:
+                return String(self.value[start:end])
+        except:
+            return Void()
+
+    def _method_concat_(self, arg):
         return String(self.value + arg.repr('String').value)
 
-    def _method_stringToUppercase(self):
+    def _method_stringToUppercase_(self):
         return String(self.value.upper())
 
-    def _method_stringToLowercase(self):
+    def _method_stringToLowercase_(self):
         return String(self.value.lower())
 
-    def _method_stringAfterReplacing(self, arg, kwargs):
-        _old = arg
+    def _method_stringAfterReplacing_with_(self, old, new):
+        return String(self.value.replace(old.repr('String').value,
+                                         new.repr('String').value))
 
-        if 'with' in kwargs:
-            _with = kwargs['with']
+    def _method_stringAfterReplacing_with_times(self, old, new, times):
+        if not isinstance(times, Int):
+            throwError('TypeError: String method "stringAfterReplacing:with'
+                       'times:"takes "times:" as "Int".')
 
-        else:
-            throwWrongCallError(self, 'stringAfterReplacing')
+        return String(self.value.replace(old.repr('String').value,
+                                         new.repr('String').value,
+                                         times.value))
 
-        if 'times' not in kwargs:
-            return String(self.value.replace(_old.repr('String').value,
-                                             _with.repr('String').value))
-        else:
-            _times = kwargs['times']
-
-            if not isinstance(_times, Int):
-                throwError('TypeError: String method "stringAfterReplacing"\'s'
-                           ' argument "times" takes "Int".')
-
-            return String(self.value.replace(_old.repr('String').value,
-                                             _with.repr('String').value,
-                                             _times.value))
-
-    def _method_stringAfterTrimming(self, arg):
+    def _method_stringAfterTrimming_(self, arg):
         _value = arg
 
         return String(self.value.replace(_value.value, ''))
@@ -226,8 +213,70 @@ class List(Object):
         except:
             throwTypeError('List', obj_type)
 
-    def getItem(self, index):
-        if index < len(self.value):
-            return self.value[index]
-        else:
+    def iter(self, start, end=None):
+        try:
+            if end is None:
+                return self.value[start]
+            else:
+                return self.value[start:end]
+        except:
             return Void()
+
+
+# Builtins!
+class CoalBuiltin(Object):
+    methods = [
+        'print_',
+        'chr_',
+        'ord_'
+    ]
+
+    types = {
+        'Void': {
+            'init': Void
+        },
+        'Bool': {
+            'init': Bool
+        },
+        'Int': {
+            'init': Int
+        },
+        'Float': {
+            'init': Float
+        },
+        'String': {
+            'init': String
+        },
+        'List': {
+            'init': List
+        }
+    }
+
+    names = {}
+
+    def __init__(self):
+        super(self.__class__, self).__init__('Builtins', None, None)
+
+    def _method_print_(self, arg):
+        _value = arg
+
+        if isinstance(_value, String):
+            print(_value.value)
+        else:
+            print(_value.repr('String').value)
+
+    def _method_chr_(self, arg):
+        _value = arg
+
+        if isinstance(_value, Int):
+            return String(chr(_value.value))
+        else:
+            throwError('TypeError: Built-in method "chr" takes "Int".')
+
+    def _method_ord_(self, arg):
+        _value = arg
+
+        if isinstance(_value, String):
+            return Int(ord(_value.value))
+        else:
+            throwError('TypeError: Built-in method "ord" takes "String".')
