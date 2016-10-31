@@ -15,9 +15,7 @@ import collections
 import ply.yacc as yacc
 
 import lexer
-from CoalObject import Object, CoalBuiltin, Void, Bool, Int, Float, String, List
-
-Builtins = CoalBuiltin()
+from CoalAST import *
 
 
 # Utils
@@ -52,8 +50,25 @@ def flatten(l):
     Flatten a x-dimensional list into a 1D list
     '''
 
+    def dims(testlist, dim=0):
+        if isinstance(testlist, list):
+            if testlist == []:
+                return dim
+            dim = dim + 1
+            dim = dims(testlist[0], dim)
+            return dim
+        else:
+            if dim == 0:
+                return -1
+            else:
+                return dim
+
+    if dims(l) < 2:
+        pass
+
     for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes)):
+        if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes))\
+           and not isinstance(el, CoalAST):
             yield from flatten(el)
         else:
             yield el
@@ -64,18 +79,28 @@ def flatten(l):
 tokens = lexer.tokens
 
 
-# Statements
 def p_program(p):
     '''
     program : stmts
     '''
 
+    if isinstance(p[1], list):
+        p.lexer.ast = list(flatten(p[1]))
+    else:
+        p.lexer.ast = [p[1]]
 
+
+# Statements
 def p_stmts(p):
     '''
     stmts : stmts stmt
           | stmt
     '''
+
+    if len(p) == 3:
+        p[0] = p[1:]
+    else:
+        p[0] = p[1]
 
 
 def p_stmt(p):
@@ -84,10 +109,11 @@ def p_stmt(p):
          | var_assign
          | func_def
          | func_ret
-         | func_end
          | type_def
          | method_call
     '''
+    # p.lexer.ast.append(p[1])
+    p[0] = p[1]
 
 
 # Variable definition
@@ -99,17 +125,15 @@ def p_var_def(p):
     # Make the important tokens easy to use
     var_name = p[2]
     var_type = p[4]
-    var_value = p[6].value
-    var_value_type = p[6].object_type
+    var_value = p[6]
 
-    # Try to create a new variable and assign an Object to it
-    var_obj = createObject(var_type, var_value, var_value_type)
-    # var_obj_id = id(var_obj)
+    it = NameDef(
+        var_name,
+        var_type,
+        var_value
+    )
 
-    if var_obj:
-        p.lexer.local_scope[p.lexer.current_scope]['names'][var_name] = var_obj
-    else:
-        throwError(p, 2, 'TypeError: Unknown type "{}"'.format(var_type))
+    p[0] = it
 
 
 def p_var_def_empty(p):
@@ -121,12 +145,10 @@ def p_var_def_empty(p):
     var_name = p[2]
     var_type = p[4]
 
-    # Try to create an uninitialized variable
-    if var_type in p.lexer.local_scope[p.lexer.current_scope]['types']\
-       or var_type == 'Any':
-        p.lexer.local_scope[p.lexer.current_scope]['names'][var_name] = Void(obj_type=var_type)
-    else:
-        throwError(p, 4, 'TypeError: Unknown type "{}"'.format(var_type))
+    p[0] = NameDefEmpty(
+        var_name,
+        var_type
+    )
 
 
 def p_var_assign(p):
@@ -137,21 +159,10 @@ def p_var_assign(p):
     var_name = p[1]
     var_value = p[3]
 
-    scope = p.lexer.local_scope[p.lexer.current_scope]
-
-    if var_name not in scope['names']:
-        throwError(p, 1, 'NameError: Unknown name "{}"'.format(var_name))
-
-    if isinstance(scope['names'][var_name], Void):
-        var_type = scope['names'][var_name].value
-
-        if var_type != 'Any'\
-           and var_type != var_value.object_type:
-            throwError(p, 3, 'TypeError: Wrong value type for Void({}): {}'
-                             .format(var_type,
-                                     var_value.object_type))
-
-    scope['names'][var_name] = var_value
+    p[0] = NameAssign(
+        var_name,
+        var_value
+    )
 
 
 # Class definition
@@ -173,74 +184,49 @@ def p_method_call(p):
     '''
 
     # Flatten argument list
-    p[3] = [p[3]] + list(flatten(p[4]))
-    p[3] = [p[3][i:i + 3] for i in range(0, len(p[3]), 3)]
+    if len(p) > 4:
+        p[3] = [p[3]] + list(flatten(p[4]))
+        p[3] = [p[3][i:i + 3] for i in range(0, len(p[3]), 3)]
 
-    for item in p[3]:
-        del item[1]
+        for item in p[3]:
+            del item[1]
+    else:
+        p[3] = []
 
-    p[4] = None
-
-    if not isinstance(p[2], Object):
-        call_args = [v for v in list(flatten(p[3]))[:] if v != ':']
+    if not isinstance(p[2], CoalAST):
         selectors = '{}_'.format(p[2])
-        args = [call_args[0]]
 
-        if len(call_args) > 2:
-            for i in range(1, len(call_args), 2):
-                selectors += '{}_'.format(call_args[i])
-                args.append(call_args[i+1])
+        if len(p[3]):
+            call_args = [v for v in list(flatten(p[3]))[:] if v != ':']
+            selector_args = [call_args[0]]
 
-        if selectors in Builtins.methods:
-            p[0] = Builtins.call(selectors, args)
-        elif selectors in p.lexer.local_scope[p.lexer.current_scope]['methods']:
-            current_scope = p.lexer.current_scope
-            func = p.lexer.local_scope[current_scope]['methods'][selectors]
-            func_code = func['code']
-            func_args = func['args']
+            if len(call_args) > 2:
+                for i in range(1, len(call_args), 2):
+                    selectors += '{}_'.format(call_args[i])
+                    selector_args.append(call_args[i+1])
+        else:
+            selector_args = []
 
-            p.lexer.current_scope += 1
-            p.lexer.local_scope.append({
-                'types': Builtins.types,
-                'methods': {},
-                'names': Builtins.names
-            })
-
-            if len(args) != len(func_args):
-                throwError(p, 0, 'Wrong argument count for {}'
-                                 .format(selectors))
-            else:
-                for i in range(len(args)):
-                    p.lexer.local_scope[p.lexer.current_scope]['names'][func_args[i]] = args[i]
-
-            for line in func_code:
-                if p.lexer.returned:
-                    p.lexer.returned = False
-                    break
-
-                if line.lstrip(' ').lstrip('\t').startswith('//')\
-                   or line.rstrip('\n') == '':
-                    continue
-
-                if not lexer.def_in or line.rstrip('\n') == 'end':
-                    parser.parse(line)
-                else:
-                    lexer.def_list[lexer.def_depth]['code']\
-                         .append(line.lstrip(' ')
-                                     .lstrip('\t'))
-
-            p[0] = p.lexer.ret_value
-            p.lexer.ret_value = Void(obj_type='Void')
+        p[0] = LocalMethodCall(
+            selectors,
+            selector_args
+        )
     else:
         call_args = list(flatten(p[3]))
         selectors = ''
-        args = []
+        selector_args = []
 
         for i in range(0, len(call_args), 2):
             selectors += '{}_'.format(call_args[i])
-            args.append(call_args[i+1])
 
-        p[0] = p[2].call(selectors, args)
+            if len(call_args) > 1:
+                selector_args.append(call_args[i+1])
+
+        p[0] = ObjectMethodCall(
+            p[2],
+            selectors,
+            selector_args
+        )
 
 
 def p_call_arglist(p):
@@ -250,7 +236,7 @@ def p_call_arglist(p):
     '''
     p[0] = p[1:]
 
-    # That doesn't seem to work when we're dealing with Object instances:
+    # This doesn't seem to work when we're dealing with Object instances:
     # if isinstance(p[len(p)-1], Object):
     #     p[0] = p[1:]
     # else:
@@ -258,36 +244,56 @@ def p_call_arglist(p):
 
 
 # Function definition
+def p_func_def_simple(p):
+    '''
+    func_def : DEF NAME AS TYPE_NAME stmts END
+    '''
+
+    selector = p[2]
+    return_type = p[4]
+
+    if isinstance(p[5], list):
+        suite = list(flatten(p[5]))
+    else:
+        suite = [p[5]]
+
+    p[0] = FuncDef(
+        [selector],
+        [],
+        [],
+        return_type,
+        suite,
+        True
+    )
+
+
 def p_func_def(p):
     '''
-    func_def : DEF func_argdefs AS TYPE_NAME
+    func_def : DEF func_argdefs AS TYPE_NAME stmts END
     '''
 
     # TODO
-    # It's still a work in progress.
+    # 0.2 - It's still a work in progress.
+    # 0.3 - It seems stable now.
 
     selectors = p[2]
     selector_names = [s[0] for s in selectors]
     selector_types = [s[1] for s in selectors]
-
-    method_name = ''
-    for selector in selector_names:
-        method_name += '{}_'.format(selector)
-
+    selector_aliases = [s[2] if len(s) > 2 else None for s in selectors]
     return_type = p[4]
 
-    # Apply selector aliases
-    selector_names = [s[2] if len(s) > 2 else s[0] for s in selectors]
+    if isinstance(p[5], list):
+        suite = list(flatten(p[5]))
+    else:
+        suite = [p[5]]
 
-    p.lexer.def_depth += 1
-    p.lexer.def_in = True
-    p.lexer.def_list.append({
-        'name': method_name,
-        'args': selector_names,
-        'types': selector_types,
-        'return': return_type,
-        'code': []
-    })
+    p[0] = FuncDef(
+        selector_names,
+        selector_types,
+        selector_aliases,
+        return_type,
+        suite
+    )
 
 
 def p_func_argdefs(p):
@@ -316,23 +322,6 @@ def p_func_argdef_single(p):
         p[0] = [p[1], p[4], p[5]]
 
 
-def p_func_end(p):
-    '''
-    func_end : END
-    '''
-
-    if p.lexer.def_in:
-        func = p.lexer.def_list[p.lexer.def_depth]
-        name = func['name']
-        p.lexer.local_scope[p.lexer.current_scope]['methods'][name] = func
-
-        del p.lexer.def_list[p.lexer.def_depth]
-        p.lexer.def_depth -= 1
-        p.lexer.def_in = False
-    else:
-        throwError(p, 0, 'Unmatched END')
-
-
 def p_func_ret(p):
     '''
     func_ret : FUNC_RET value
@@ -340,9 +329,76 @@ def p_func_ret(p):
     '''
 
     if len(p) > 2:
-        p.lexer.ret_value = p[2]
+        p[0] = FuncRet(p[2])
     else:
-        pass
+        p[0] = FuncRet(Void('Void'))
+
+
+# Expressions
+precedence = (
+    ('left', 'PLUS', 'MINUS'),
+    ('left', 'TIMES', 'DIVIDE'),
+    ('right', 'UMINUS'),
+)
+
+
+def p_expression_value(p):
+    '''
+    expression : value
+    '''
+    p[0] = p[1]
+
+
+def p_expression_binop(p):
+    '''
+    expression : expression PLUS expression
+               | expression MINUS expression
+               | expression TIMES expression
+               | expression DIVIDE expression
+               | expression PERCENT expression
+               | expression AND expression
+               | expression OR expression
+               | expression XOR expression
+               | expression LSHIFT expression
+               | expression RSHIFT expression
+    '''
+
+    if p[2] == '+':
+        p[0] = ExprAddition(p[1], p[3])
+    elif p[2] == '-':
+        p[0] = ExprSubtraction(p[1], p[3])
+    elif p[2] == '*':
+        p[0] = ExprMultiplication(p[1], p[3])
+    elif p[2] == '/':
+        p[0] = ExprDivision(p[1], p[3])
+    elif p[2] == '%':
+        p[0] = ExprModulo(p[1], p[3])
+    elif p[2] == '&':
+        p[0] = ExprBitAnd(p[1], p[3])
+    elif p[2] == '|':
+        p[0] = ExprBitOr(p[1], p[3])
+    elif p[2] == '^':
+        p[0] = ExprBitXor(p[1], p[3])
+    elif p[2] == '<<':
+        p[0] = ExprBitShiftL(p[1], p[3])
+    elif p[2] == '>>':
+        p[0] = ExprBitShiftR(p[1], p[3])
+    # elif p[0] == '~':
+    #     p[0] = ExprBitNot(p[2])
+
+
+def p_expression_uminus(p):
+    '''
+    expression : MINUS expression %prec UMINUS
+    '''
+    p[0] = type(p[2]).__class__(-p[2].value)
+
+
+def p_expression_group(p):
+    '''
+    expression : LPAREN expression RPAREN
+    '''
+    p[0] = p[2]
 
 
 # Values
@@ -350,6 +406,7 @@ def p_value(p):
     '''
     value : OBJECT
           | method_call
+          | expression
     '''
     p[0] = p[1]
 
@@ -395,14 +452,18 @@ def p_value_list_items(p):
     list_items : list_items COMMA value
                | value
     '''
-    p[0] = list(flatten(filter(lambda a: a != ',', p[1:])))
+
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = list(flatten(filter(lambda a: a != ',', p[1:])))
 
 
 def p_value_name(p):
     '''
     value : NAME
     '''
-    p[0] = p.lexer.local_scope[p.lexer.current_scope]['names'][p[1]]
+    p[0] = Name(p[1])
 
 
 def p_value_get_item(p):
@@ -411,18 +472,10 @@ def p_value_get_item(p):
           | value LBRACE value RBRACE
     '''
 
-    if callable(p[1].iter):
-        if len(p) == 5:
-            item = p[1].iter(p[3].value)
-        else:
-            item = p[1].iter(p[3].value, p[5].value)
-
-        if isinstance(item, Void):
-            throwError(p, 3, 'IndexError: Index out of range ({})'
-                             .format(p[3].value))
+    if len(p) == 5:
+        item = ItemFromIterable(p[1], p[3])
     else:
-        throwError(p, 1, 'TypeError: "{}" object is not iterable'
-                         .format(p[1].object_type))
+        item = ItemFromIterable(p[1], p[3], p[5])
 
     p[0] = item
 
@@ -440,24 +493,7 @@ src = '\n'.join(code)
 
 # lexer = lexer.IndentLexer()
 lexer = lexer.lexer
-
-lexer.ignore_line = False
-
-lexer.def_depth = -1
-lexer.def_in = False
-lexer.def_list = []
-
-lexer.returned = False
-lexer.ret_value = Void(obj_type='Void')
-
-lexer.local_scope = []
-lexer.current_scope = 0
-
-lexer.local_scope.append({
-    'types': Builtins.types,
-    'methods': {},
-    'names': Builtins.names
-})
+lexer.ast = []
 
 DEBUGGING = False
 
@@ -475,13 +511,9 @@ else:
 
         print(tok)
 
-for line in code:
-    if line.lstrip(' ').lstrip('\t').startswith('//')\
-       or line.rstrip('\n') == '':
-        continue
+parser.parse(src)
 
-    if not lexer.def_in or line.rstrip('\n') == 'end':
-        parser.parse(line)
-    else:
-        lexer.def_list[lexer.def_depth]['code'].append(line.lstrip(' ')
-                                                           .lstrip('\t'))
+
+# TODO: Parse AST
+for stmt in lexer.ast:
+    ExecuteCoal(stmt)

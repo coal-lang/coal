@@ -2,19 +2,24 @@
 class String ->
     init (String value) -> String
         [this string: value]
+    end
 
     init fromBytes:(Bytes bytes) withEncoding:(String encoding) -> String
         [this string: [bytes toStringWithEncoding: encoding]]
+    end
 
     init fromCharacters:(List chars) -> String
         foreach chars -> char
             [[this string] concat: char]
+    end
 
     init fromString:(String string) -> String
         [this string: [string string]]
+    end
 
     repr -> String
         return [this string]
+    end
 
     public ->
         let string: String
@@ -30,6 +35,8 @@ class String ->
             return [[this string] replace: initial with: final]
 
         # ... #
+    end
+end
 
 let helloWorld: String = 'Hello, world!' # This calls `init` without named arguments (first definition above)
 

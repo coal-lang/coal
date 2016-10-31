@@ -51,6 +51,8 @@ reserved = {
 tokens = (
     'WITH', 'AS', 'ASK', 'NEWLINE',
     'SPACE', 'COMMA', 'EQUALS', 'BAR', 'NOT_EQUAL', 'PERCENT',
+    'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
+    'AND', 'OR', 'XOR', 'RSHIFT', 'LSHIFT', 'NOT',
     'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LSQB', 'RSQB',
     'TYPE_NAME',
 )
@@ -81,6 +83,18 @@ t_PERCENT = r'\%'
 t_LBRACE = r'\{'
 t_RBRACE = r'\}'
 t_TYPE_NAME = r'\b[A-Z][a-zA-Z]+'
+
+# For expressions
+t_PLUS = r'\+'
+t_MINUS = r'\-^\>'
+t_TIMES = r'\*'
+t_DIVIDE = r'\/'
+t_AND = r'\&'
+t_OR = r'\|'
+t_XOR = r'\^'
+t_RSHIFT = r'\>\>'
+t_LSHIFT = r'\<\<'
+t_NOT = r'\~'
 
 
 def t_LPAREN(t):
