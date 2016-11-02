@@ -36,11 +36,12 @@ reserved = {
     'while': 'LOOP_WHILE',
 
     # Conditionals
-    'if': 'COND_IF',
-    'elif': 'COND_ELIF',
-    'else': 'COND_ELSE',
-    'try': 'COND_TRY',
-    'except': 'COND_EXC',
+    'elif': 'ELIF',
+    'if': 'IF',
+    'else': 'ELSE',
+    'try': 'TRY',
+    'except': 'EXCEPT',
+    'then': 'THEN',
 
     # Booleans
     'true': 'TRUE',
@@ -53,6 +54,7 @@ tokens = (
     'SPACE', 'COMMA', 'EQUALS', 'BAR', 'NOT_EQUAL', 'PERCENT',
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
     'AND', 'OR', 'XOR', 'RSHIFT', 'LSHIFT', 'NOT',
+    'EQEQUAL', 'GREATER', 'LESSER',
     'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LSQB', 'RSQB',
     'TYPE_NAME',
 )
@@ -70,6 +72,11 @@ complex = (
 
 tokens += tuple(reserved.values())
 tokens += complex
+
+# For tests
+t_EQEQUAL = r'\=\='
+t_GREATER = r'^\-\>'
+t_LESSER = r'\<'
 
 # Simple tokens
 t_WITH = r':'
@@ -95,7 +102,6 @@ t_XOR = r'\^'
 t_RSHIFT = r'\>\>'
 t_LSHIFT = r'\<\<'
 t_NOT = r'\~'
-
 
 def t_LPAREN(t):
     r'\('

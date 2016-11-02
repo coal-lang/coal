@@ -68,7 +68,7 @@ def flatten(l):
 
     for el in l:
         if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes))\
-           and not isinstance(el, CoalAST):
+           and not isinstance(el, CoalAST) and not isinstance(el, tuple):
             yield from flatten(el)
         else:
             yield el
@@ -83,11 +83,7 @@ def p_program(p):
     '''
     program : stmts
     '''
-
-    if isinstance(p[1], list):
-        p.lexer.ast = list(flatten(p[1]))
-    else:
-        p.lexer.ast = [p[1]]
+    p.lexer.ast = list(flatten(p[1]))
 
 
 # Statements
@@ -100,7 +96,7 @@ def p_stmts(p):
     if len(p) == 3:
         p[0] = p[1:]
     else:
-        p[0] = p[1]
+        p[0] = [p[1]]
 
 
 def p_stmt(p):
@@ -111,6 +107,7 @@ def p_stmt(p):
          | func_ret
          | type_def
          | method_call
+         | conditional
     '''
     # p.lexer.ast.append(p[1])
     p[0] = p[1]
@@ -334,7 +331,74 @@ def p_func_ret(p):
         p[0] = FuncRet(Void('Void'))
 
 
-# Expressions
+# Conditional
+def p_conditional(p):
+    '''
+    conditional : ifblock END
+                | ifblock elseblock END
+                | ifblock elifblocks END
+                | ifblock elifblocks elseblock END
+    '''
+
+    if len(p) == 3:  # IF test THEN stmts END
+        p[0] = IfBlock(
+            p[1][0],
+            p[1][1]
+        )
+    elif len(p) == 4:  # (IfBlock ELSE stmts END)
+        if p[2][0] is None:
+            p[0] = IfBlock(
+                p[1][0],
+                p[1][1],
+                p[2][1:]
+            )
+        else:
+            p[0] = IfBlock(
+                p[1][0],
+                p[1][1],
+                else_suite=p[2]
+            )
+    else:
+        if len(p) > 3:
+            else_suite = p[3]
+        else:
+            else_suite = None
+
+        p[0] = IfBlock(
+            p[1][0],
+            p[1][1],
+            p[2][1:],
+            else_suite
+        )
+
+
+def p_if_elif_block(p):
+    '''
+    ifblock : IF value THEN stmts
+    elifblock : ELIF value THEN stmts
+    '''
+    p[0] = (p[2], p[4])
+
+
+def p_elif_blocks(p):
+    '''
+    EMPTY :
+
+    elifblocks : elifblocks elifblock
+               | EMPTY
+    '''
+    if len(p) == 3:
+        p[0] = list(flatten(p[1:]))
+
+
+def p_else_block(p):
+    '''
+    elseblock : ELSE stmts
+    '''
+    p[0] = p[2]
+
+
+# Value
 precedence = (
     ('left', 'PLUS', 'MINUS'),
     ('left', 'TIMES', 'DIVIDE'),
@@ -342,25 +406,19 @@ precedence = (
 )
 
 
-def p_expression_value(p):
+def p_value_binop(p):
     '''
-    expression : value
-    '''
-    p[0] = p[1]
-
-
-def p_expression_binop(p):
-    '''
-    expression : expression PLUS expression
-               | expression MINUS expression
-               | expression TIMES expression
-               | expression DIVIDE expression
-               | expression PERCENT expression
-               | expression AND expression
-               | expression OR expression
-               | expression XOR expression
-               | expression LSHIFT expression
-               | expression RSHIFT expression
+    value : value PLUS value
+          | value MINUS value
+          | value TIMES value
+          | value DIVIDE value
+          | value PERCENT value
+          | value AND value
+          | value OR value
+          | value XOR value
+          | value LSHIFT value
+          | value RSHIFT value
+          | value EQEQUAL value
     '''
 
     if p[2] == '+':
@@ -383,30 +441,28 @@ def p_expression_binop(p):
         p[0] = ExprBitShiftL(p[1], p[3])
     elif p[2] == '>>':
         p[0] = ExprBitShiftR(p[1], p[3])
-    # elif p[0] == '~':
-    #     p[0] = ExprBitNot(p[2])
+    elif p[2] == '==':
+        p[0] = ExprEqual(p[1], p[3])
 
 
-def p_expression_uminus(p):
+def p_value_uminus(p):
     '''
-    expression : MINUS expression %prec UMINUS
+    value : MINUS value %prec UMINUS
     '''
     p[0] = type(p[2]).__class__(-p[2].value)
 
 
-def p_expression_group(p):
+def p_value_group(p):
     '''
-    expression : LPAREN expression RPAREN
+    value : LPAREN value RPAREN
     '''
     p[0] = p[2]
 
 
-# Values
 def p_value(p):
     '''
     value : OBJECT
           | method_call
-          | expression
     '''
     p[0] = p[1]
 

@@ -9,21 +9,34 @@
 // [print: more_fruits{0}]
 // [print: more_fruits{0}{1}]
 
-def replaceInString:(String str) word:(String) with:(String) -> Bool
-    def writeMessage:(String msg) -> Void
-        def actuallyPrint:(String it) -> Void
-            [print: it]
-        end
 
-        [actuallyPrint: msg]
-    end
+// def replaceInString:(String str) word:(String) with:(String) -> Bool
+//     def writeMessage:(String msg) -> Void
+//         def actuallyPrint:(String it) -> Void
+//             [print: it]
+//         end
 
-    [writeMessage: [str stringAfterReplacing: word with: with]]
+//         [actuallyPrint: msg]
+//     end
 
-    return true
-end
+//     [writeMessage: [str stringAfterReplacing: word with: with]]
 
-let result: Any?
-result = [replaceInString: "Hello, world!" word: "world" with: "Coal"]
+//     return true
+// end
 
-[print: ["The call returned: " concat: result]]
+// let result: Any?
+// result = [replaceInString: "Hello, world!" word: "world" with: "Coal"]
+
+// [print: ["The call returned: " concat: result]]
+
+
+// if true then
+//     [print: "It's the truth!"]
+// elif 42 then
+//     [print: "It's the meaning of life!"]
+// else
+//     [print: "It's a lie!'"]
+// end
+
+
+[print: "42" == 42]

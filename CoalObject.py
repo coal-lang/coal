@@ -95,7 +95,7 @@ class CoalBool(CoalObject):
                                                  boole)
 
             self.repr_as = {
-                'String': lambda: CoalString('Bool({})'.format(self.value))
+                'String': lambda: CoalString('Bool({})'.format(value))
             }
         except:
             throwTypeError('Bool', obj_type)

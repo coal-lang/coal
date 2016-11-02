@@ -146,17 +146,18 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                                  'ExprBitOr',
                                  'ExprBitXor',
                                  'ExprBitShiftR',
-                                 'ExprBitShiftL']:
+                                 'ExprBitShiftL',
+                                 'ExprEqual']:
         stmt.a = ExecuteCoal(stmt.a, scope)
         stmt.b = ExecuteCoal(stmt.b, scope)
 
         a_type = stmt.a.object_type
         b_type = stmt.b.object_type
 
-        if all(a_type != t for t in ('Int', 'Float'))\
-           or all(b_type != t for t in ('Int', 'Float')):
-            throwError(0, 0, 'TypeError: Invalid types for "+": {}, {}'
-                             .format(a_type, b_type))
+        # if all(a_type != t for t in ('Int', 'Float'))\
+        #    or all(b_type != t for t in ('Int', 'Float')):
+        #     throwError(0, 0, 'TypeError: Invalid types for "+": {}, {}'
+        #                      .format(a_type, b_type))
 
         expr_type = type(stmt).__name__
 
@@ -180,11 +181,15 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             result = stmt.a.value >> stmt.b.value
         elif expr_type == 'ExprBitShiftL':
             result = stmt.a.value << stmt.b.value
+        elif expr_type == 'ExprEqual':
+            result = 'true' if stmt.a.value == stmt.b.value else 'false'
 
-        if (a_type, b_type) == ('Int', 'Int'):
+        if type(result) == int:
             return CoalInt(result)
-        else:
+        elif type(result) == float:
             return CoalFloat(result)
+        else:
+            return CoalBool(result)
 
     # Value
     elif isinstance(stmt, Value):
@@ -277,6 +282,16 @@ class NameAssign(CoalAST):
         self.value = value
 
 
+class IterableItemAssign(CoalAST):
+    def __init__(self,
+                 name,
+                 index,
+                 value):
+        self.name = name
+        self.index = index
+        self.value = value
+
+
 # Function
 class FuncDef(CoalAST):
     def __init__(self,
@@ -323,6 +338,19 @@ class TypeDefExt(CoalAST):
         self.suite = suite
 
 
+# Conditional
+class IfBlock(CoalAST):
+    def __init__(self,
+                 test,
+                 suite,
+                 elif_blocks=None,
+                 else_suite=None):
+        self.test = test
+        self.suite = suite
+        self.elif_blocks = elif_blocks
+        self.else_suite = else_suite
+
+
 # Expression
 class ExprAddition(CoalAST):
     def __init__(self,
@@ -357,6 +385,14 @@ class ExprDivision(CoalAST):
 
 
 class ExprModulo(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprEqual(CoalAST):
     def __init__(self,
                  a,
                  b):
