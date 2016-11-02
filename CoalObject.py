@@ -1,11 +1,10 @@
-#!/usr/env/bin python
 #: vim set encoding=utf-8 :
 ##
  # Stove
  # Coal interpreter prototype
  #
  # Module: Built-in Objects
- # version 0.1
+ # version 0.2
 ##
 
 # Imports
@@ -36,7 +35,7 @@ def throwError(message):
 
 
 # Basic object
-class Object(object):
+class CoalObject(object):
     methods = []
 
     def __init__(self, obj_type, type, value):
@@ -47,23 +46,18 @@ class Object(object):
         self.attributes = {}
 
         self.repr_as = {
-            'String': lambda: String(self.value),
-            'Raw': lambda: String(self.value)
+            'String': lambda: CoalString(self.value),
+            'Raw': lambda: CoalString(self.value)
         }
 
-    def call(self, name, arg=None, kwargs=None):
-        if name in self.methods:
-            if arg is None:
-                return getattr(self, '_method_{}'.format(name))()
-            elif kwargs is None:
-                return getattr(self, '_method_{}'.format(name))(arg)
-            else:
-                return getattr(self, '_method_{}'.format(name))(arg, kwargs)
-        elif name in self.attributes:
-            return self.attributes[name]
+    def call(self, selectors, args):
+        if selectors in self.methods:
+            return getattr(self, '_method_{}'.format(selectors))(*args)
+        elif selectors in self.attributes:
+            return self.attributes[selectors]
         else:
             throwMethodError('"{}" object has no method/attribute "{}".'
-                             .format(type(self).__name__, name))
+                             .format(type(self).__name__, selectors))
             sys.exit(1)
 
     def repr(self, as_type):
@@ -71,60 +65,74 @@ class Object(object):
 
 
 # Void
-class Void(Object):
-    def __init__(self, of_type=None):
+class CoalVoid(CoalObject):
+    def __init__(self, of_type=None, obj_type=None):
         if of_type is None:
-            super(self.__class__, self).__init__('Void', 'void', 'Void')
+            if obj_type is not None:
+                super(self.__class__, self).__init__('Void', 'void', obj_type)
+            else:
+                super(self.__class__, self).__init__('Void', 'void', 'Void')
         else:
             super(self.__class__, self).__init__('Void',
                                                  'void',
-                                                 of_type.obj_type)
+                                                 of_type.object_type)
 
         self.repr_as = {
-            'String': lambda: String('Void({})'.format(self.value))
+            'String': lambda: CoalString('Void({})'.format(self.value))
         }
 
 
-# Builtins!
-class _Builtins(Object):
-    methods = [
-        'print',
-        'chr',
-        'ord'
-    ]
+class CoalBool(CoalObject):
+    def __init__(self, value, obj_type=None):
+        try:
+            if value == 'true':
+                boole = True
+            else:
+                boole = False
 
-    def __init__(self):
-        super(self.__class__, self).__init__('Builtins', None, None)
+            super(self.__class__, self).__init__('Bool',
+                                                 value,
+                                                 boole)
 
-    def _method_print(self, arg):
-        _value = arg
+            self.repr_as = {
+                'String': lambda: CoalString('Bool({})'.format(value))
+            }
+        except:
+            throwTypeError('Bool', obj_type)
 
-        if isinstance(_value, String):
-            print(_value.value)
-        else:
-            print(_value.repr('String').value)
 
-    def _method_chr(self, arg):
-        _value = arg
+# Function
+class CoalFunction(object):
+    def __init__(self, selectors, names, types, aliases, rtype, suite,
+                 simple=False):
+        self.selectors = selectors
+        self.names = names
+        self.types = types
+        self.aliases = aliases
+        self.rtype = rtype
+        self.suite = suite
+        self.simple = simple
 
-        if isinstance(_value, Int):
-            return String(chr(_value.value))
-        else:
-            throwError('TypeError: Built-in method "chr" takes "Int".')
+    def __call__(self, scope, args):
+        if len(args) < len(self.names) and not self.simple:
+            throwError('Exception: Wrong argument count for {}.'
+                       .format(self.selectors))
 
-    def _method_ord(self, arg):
-        _value = arg
+        for i in range(len(args)):
+            if args[i].object_type != self.types[i]:
+                throwError('TypeError: Wrong argument type for "{}": "{}"'
+                           .format(self.selectors, args[i].object_type))
 
-        if isinstance(_value, String):
-            return Int(ord(_value.value))
-        else:
-            throwError('TypeError: Built-in method "ord" takes "String".')
+            if self.aliases[i] is not None:
+                scope['names'][self.aliases[i]] = args[i]
+            else:
+                scope['names'][self.names[i]] = args[i]
 
-Builtins = _Builtins()
+        return (self.suite, scope, self.rtype)
 
 
 # Integer
-class Int(Object):
+class CoalInt(CoalObject):
     def __init__(self, value, obj_type=None):
         try:
             super(self.__class__, self).__init__('Int',
@@ -135,7 +143,7 @@ class Int(Object):
 
 
 # Float
-class Float(Object):
+class CoalFloat(CoalObject):
     def __init__(self, value, obj_type=None):
         try:
             super(self.__class__, self).__init__('Float',
@@ -146,13 +154,14 @@ class Float(Object):
 
 
 # String
-class String(Object):
+class CoalString(CoalObject):
     methods = [
-        'concat',
-        'stringToUppercase',
-        'stringToLowercase',
-        'stringAfterReplacing',
-        'stringAfterTrimming'
+        'concat_',
+        'stringToUppercase_',
+        'stringToLowercase_',
+        'stringAfterReplacing_with_',
+        'stringAfterReplacing_with_times_'
+        'stringAfterTrimming_'
     ]
 
     def __init__(self, value, obj_type=None):
@@ -162,53 +171,52 @@ class String(Object):
                                                  str(value))
 
             self.attributes = {
-                'length': Int(len(str(value)))
+                'length': CoalInt(len(str(value)))
             }
 
-            self.repr_as['Raw'] = lambda: String('"{}"'.format(self.value))
+            self.repr_as['Raw'] = lambda: CoalString('"{}"'.format(self.value))
         except:
             throwTypeError('String', obj_type)
 
-    def _method_concat(self, arg):
-        return String(self.value + arg.repr('String').value)
+    def iter(self, start, end=None):
+        try:
+            if end is None:
+                return CoalString(self.value[start.value])
+            else:
+                return CoalString(self.value[start.value:end.value])
+        except:
+            return CoalVoid()
 
-    def _method_stringToUppercase(self):
-        return String(self.value.upper())
+    def _method_concat_(self, arg):
+        return CoalString(self.value + arg.repr('String').value)
 
-    def _method_stringToLowercase(self):
-        return String(self.value.lower())
+    def _method_stringToUppercase_(self):
+        return CoalString(self.value.upper())
 
-    def _method_stringAfterReplacing(self, arg, kwargs):
-        _old = arg
+    def _method_stringToLowercase_(self):
+        return CoalString(self.value.lower())
 
-        if 'with' in kwargs:
-            _with = kwargs['with']
+    def _method_stringAfterReplacing_with_(self, old, new):
+        return CoalString(self.value.replace(old.repr('String').value,
+                                             new.repr('String').value))
 
-        else:
-            throwWrongCallError(self, 'stringAfterReplacing')
+    def _method_stringAfterReplacing_with_times(self, old, new, times):
+        if not isinstance(times, CoalInt):
+            throwError('TypeError: String method "stringAfterReplacing:with'
+                       'times:"takes "times:" as "Int".')
 
-        if 'times' not in kwargs:
-            return String(self.value.replace(_old.repr('String').value,
-                                             _with.repr('String').value))
-        else:
-            _times = kwargs['times']
+        return CoalString(self.value.replace(old.repr('String').value,
+                                             new.repr('String').value,
+                                             times.value))
 
-            if not isinstance(_times, Int):
-                throwError('TypeError: String method "stringAfterReplacing"\'s'
-                           ' argument "times" takes "Int".')
-
-            return String(self.value.replace(_old.repr('String').value,
-                                             _with.repr('String').value,
-                                             _times.value))
-
-    def _method_stringAfterTrimming(self, arg):
+    def _method_stringAfterTrimming_(self, arg):
         _value = arg
 
-        return String(self.value.replace(_value.value, ''))
+        return CoalString(self.value.replace(_value.value, ''))
 
 
 # List
-class List(Object):
+class CoalList(CoalObject):
     def __init__(self, value, obj_type=None):
         try:
             super(self.__class__, self).__init__('List',
@@ -216,18 +224,80 @@ class List(Object):
                                                  list(value))
 
             self.attributes = {
-                'length': Int(len(list(value)))
+                'length': CoalInt(len(list(value)))
             }
 
-            self.repr_as['String'] = lambda: String('List({})'.format(
+            self.repr_as['String'] = lambda: CoalString('List({})'.format(
                 ', '.join([str(n.repr('Raw').value) for n in self.value]))
             )
             self.repr_as['Raw'] = self.repr_as['String']
         except:
             throwTypeError('List', obj_type)
 
-    def getItem(self, index):
-        if index < len(self.value):
-            return self.value[index]
+    def iter(self, start, end=None):
+        try:
+            if end is None:
+                return self.value[start.value]
+            else:
+                return self.value[start.value:end.value]
+        except:
+            return CoalVoid()
+
+
+# Builtins!
+class CoalBuiltin(CoalObject):
+    methods = [
+        'print_',
+        'chr_',
+        'ord_'
+    ]
+
+    types = {
+        'Void': {
+            'init': CoalVoid
+        },
+        'Bool': {
+            'init': CoalBool
+        },
+        'Int': {
+            'init': CoalInt
+        },
+        'Float': {
+            'init': CoalFloat
+        },
+        'String': {
+            'init': CoalString
+        },
+        'List': {
+            'init': CoalList
+        }
+    }
+
+    names = {}
+
+    def __init__(self):
+        super(self.__class__, self).__init__('Builtins', None, None)
+
+    def _method_print_(self, arg):
+        _value = arg
+
+        if isinstance(_value, CoalString):
+            print(_value.value)
         else:
-            return Void()
+            print(_value.repr('String').value)
+
+    def _method_chr_(self, arg):
+        _value = arg
+
+        if isinstance(_value, CoalInt):
+            return CoalString(chr(_value.value))
+        else:
+            throwError('TypeError: Built-in method "chr" takes "Int".')
+
+    def _method_ord_(self, arg):
+        _value = arg
+
+        if isinstance(_value, CoalString):
+            return CoalInt(ord(_value.value))
+        else:
+            throwError('TypeError: Built-in method "ord" takes "String".')

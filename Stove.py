@@ -1,11 +1,11 @@
-#!/usr/env/bin python
+#!/usr/bin/env python3
 #: vim set encoding=utf-8 :
 ##
  # Stove
  # Coal interpreter prototype
  #
  # author William "10c8" F.
- # version 0.2
+ # version 0.3
  # copyright MIT
 ##
 
@@ -15,32 +15,7 @@ import collections
 import ply.yacc as yacc
 
 import lexer
-from CoalObject import Object, Void, Builtins, Int, Float, String, List
-
-
-# Globals
-local_scope = []
-current_scope = 0
-
-local_scope.append({
-    'types': {
-        'Int': {
-            'init': Int
-        },
-        'Float': {
-            'init': Float
-        },
-        'String': {
-            'init': String
-        },
-        'List': {
-            'init': List
-        }
-    },
-    'names': {
-        '_VERSION_': Float('0.1')
-    }
-})
+from CoalAST import *
 
 
 # Utils
@@ -48,6 +23,7 @@ def throwError(p, pos, message):
     '''
     Throw an error. (Do I need to explain more?)
     '''
+
     if pos > 0:
         line_num = p.lineno(pos)
 
@@ -62,7 +38,8 @@ def createObject(obj_type, obj_value, obj_value_type):
     '''
     Create a new Object from a custom (or built-in) type
     '''
-    local_types = local_scope[current_scope]['types']
+
+    local_types = lexer.local_scope[lexer.current_scope]['types']
 
     if obj_type in local_types:
         return local_types[obj_type]['init'](obj_value, obj_value_type)
@@ -72,10 +49,27 @@ def flatten(l):
     '''
     Flatten a x-dimensional list into a 1D list
     '''
+
+    def dims(testlist, dim=0):
+        if isinstance(testlist, list):
+            if testlist == []:
+                return dim
+            dim = dim + 1
+            dim = dims(testlist[0], dim)
+            return dim
+        else:
+            if dim == 0:
+                return -1
+            else:
+                return dim
+
+    if dims(l) < 2:
+        pass
+
     for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, basestring):
-            for sub in flatten(el):
-                yield sub
+        if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes))\
+           and not isinstance(el, CoalAST) and not isinstance(el, tuple):
+            yield from flatten(el)
         else:
             yield el
 
@@ -85,28 +79,38 @@ def flatten(l):
 tokens = lexer.tokens
 
 
-# Statements
 def p_program(p):
     '''
     program : stmts
     '''
+    p.lexer.ast = list(flatten(p[1]))
 
 
+# Statements
 def p_stmts(p):
     '''
     stmts : stmts stmt
           | stmt
     '''
 
+    if len(p) == 3:
+        p[0] = p[1:]
+    else:
+        p[0] = [p[1]]
+
 
 def p_stmt(p):
     '''
     stmt : var_def
+         | var_assign
          | func_def
+         | func_ret
          | type_def
          | method_call
-         | func_ret
+         | conditional
     '''
+    # p.lexer.ast.append(p[1])
+    p[0] = p[1]
 
 
 # Variable definition
@@ -118,16 +122,15 @@ def p_var_def(p):
     # Make the important tokens easy to use
     var_name = p[2]
     var_type = p[4]
-    var_value = p[6].value
-    var_value_type = p[6].object_type
+    var_value = p[6]
 
-    # Try to create a new variable and assign an Object to it
-    new_object = createObject(var_type, var_value, var_value_type)
+    it = NameDef(
+        var_name,
+        var_type,
+        var_value
+    )
 
-    if new_object:
-        local_scope[current_scope]['names'][var_name] = new_object
-    else:
-        throwError(p, 2, 'TypeError: Unknown type "{}"'.format(var_type))
+    p[0] = it
 
 
 def p_var_def_empty(p):
@@ -139,11 +142,24 @@ def p_var_def_empty(p):
     var_name = p[2]
     var_type = p[4]
 
-    # Try to create an uninitialized variable
-    if var_type in local_scope[current_scope]['types']:
-        local_scope[current_scope]['names'][var_name] = Void(var_type)
-    else:
-        throwError(p, 4, 'TypeError: Unknown type "{}"'.format(var_type))
+    p[0] = NameDefEmpty(
+        var_name,
+        var_type
+    )
+
+
+def p_var_assign(p):
+    '''
+    var_assign : NAME EQUALS value
+    '''
+
+    var_name = p[1]
+    var_value = p[3]
+
+    p[0] = NameAssign(
+        var_name,
+        var_value
+    )
 
 
 # Class definition
@@ -158,79 +174,56 @@ def p_type_def(p):
 # Method call
 def p_method_call(p):
     '''
-    method_call : LSBRACKET value NAME call_arglist RSBRACKET
-                | LSBRACKET value NAME RSBRACKET
-                | LSBRACKET NAME call_arglist RSBRACKET
-                | LSBRACKET NAME RSBRACKET
+    method_call : LSQB value NAME call_arglist RSQB
+                | LSQB value NAME RSQB
+                | LSQB NAME call_arglist RSQB
+                | LSQB NAME RSQB
     '''
 
     # Flatten argument list
-    p[3] = [p[3]] + list(flatten(p[4]))
-    p[3] = [p[3][i:i + 3] for i in xrange(0, len(p[3]), 3)]
+    if len(p) > 4:
+        p[3] = [p[3]] + list(flatten(p[4]))
+        p[3] = [p[3][i:i + 3] for i in range(0, len(p[3]), 3)]
 
-    for item in p[3]:
-        del item[1]
+        for item in p[3]:
+            del item[1]
+    else:
+        p[3] = []
 
-    p[4] = None
+    if not isinstance(p[2], CoalAST):
+        selectors = '{}_'.format(p[2])
 
-    # Debugging
-    # debug = []
+        if len(p[3]):
+            call_args = [v for v in list(flatten(p[3]))[:] if v != ':']
+            selector_args = [call_args[0]]
 
-    # if isinstance(p[2], Object):
-    #     debug.append(p[2].value)
-    # else:
-    #     debug.append(p[2])
-
-    # for i, item in enumerate(list(flatten(p[3]))):
-    #     if isinstance(item, Object):
-    #         debug.append(item.value)
-    #     else:
-    #         debug.append(item)
-
-    # print debug
-
-    # Parse call
-    if p[2] in Builtins.methods:  # Builtin
-        method_name = p[2]
-
-        call_args = list(flatten(p[3]))
-        call_args = filter(lambda a: a != ':', call_args)
-
-        call_arg = call_args[0]
-
-        if len(call_args) == 1:
-            p[0] = Builtins.call(method_name, call_arg)
+            if len(call_args) > 2:
+                for i in range(1, len(call_args), 2):
+                    selectors += '{}_'.format(call_args[i])
+                    selector_args.append(call_args[i+1])
         else:
-            method_arg = call_args[0]
-            method_kwargs = {}
+            selector_args = []
 
-            print call_args
-
-            for i in range(1, len(call_args), 2):
-                method_kwargs[call_args[i]] = call_args[i+1]
-
-            p[0] = Builtins.call(method_name,
-                                 method_arg,
-                                 method_kwargs)
+        p[0] = LocalMethodCall(
+            selectors,
+            selector_args
+        )
     else:
         call_args = list(flatten(p[3]))
-        method_name = call_args[0]
+        selectors = ''
+        selector_args = []
 
-        if len(call_args) == 1:  # [object method]
-            p[0] = p[2].call(method_name)
-        else:
-            method_name = call_args[0]
-            method_arg = call_args[1]
+        for i in range(0, len(call_args), 2):
+            selectors += '{}_'.format(call_args[i])
 
-            if len(call_args) == 2:  # [object method: argument_value]
-                p[0] = p[2].call(method_name, method_arg)
-            else:  # [object method: argument_value {...}]
-                method_kwargs = {}
+            if len(call_args) > 1:
+                selector_args.append(call_args[i+1])
 
-                for i in range(2, len(call_args), 2):
-                    method_kwargs[call_args[i]] = call_args[i+1]
-
-                p[0] = p[2].call(method_name, method_arg, method_kwargs)
+        p[0] = ObjectMethodCall(
+            p[2],
+            selectors,
+            selector_args
+        )
 
 
 def p_call_arglist(p):
@@ -240,7 +233,7 @@ def p_call_arglist(p):
     '''
     p[0] = p[1:]
 
-    # That doesn't seem to work when we're dealing with Object instances:
+    # This doesn't seem to work when we're dealing with Object instances:
     # if isinstance(p[len(p)-1], Object):
     #     p[0] = p[1:]
     # else:
@@ -248,11 +241,56 @@ def p_call_arglist(p):
 
 
 # Function definition
+def p_func_def_simple(p):
+    '''
+    func_def : DEF NAME AS TYPE_NAME stmts END
+    '''
+
+    selector = p[2]
+    return_type = p[4]
+
+    if isinstance(p[5], list):
+        suite = list(flatten(p[5]))
+    else:
+        suite = [p[5]]
+
+    p[0] = FuncDef(
+        [selector],
+        [],
+        [],
+        return_type,
+        suite,
+        True
+    )
+
+
 def p_func_def(p):
     '''
-    func_def : FUNC_DEF func_argdefs AS TYPE_NAME
+    func_def : DEF func_argdefs AS TYPE_NAME stmts END
     '''
+
     # TODO
+    # 0.2 - It's still a work in progress.
+    # 0.3 - It seems stable now.
+
+    selectors = p[2]
+    selector_names = [s[0] for s in selectors]
+    selector_types = [s[1] for s in selectors]
+    selector_aliases = [s[2] if len(s) > 2 else None for s in selectors]
+    return_type = p[4]
+
+    if isinstance(p[5], list):
+        suite = list(flatten(p[5]))
+    else:
+        suite = [p[5]]
+
+    p[0] = FuncDef(
+        selector_names,
+        selector_types,
+        selector_aliases,
+        return_type,
+        suite
+    )
 
 
 def p_func_argdefs(p):
@@ -286,16 +324,155 @@ def p_func_ret(p):
     func_ret : FUNC_RET value
              | FUNC_RET
     '''
-    # TODO
+
+    if len(p) > 2:
+        p[0] = FuncRet(p[2])
+    else:
+        p[0] = FuncRet(Void('Void'))
 
 
-# Values
+# Conditional
+def p_conditional(p):
+    '''
+    conditional : ifblock END
+                | ifblock elseblock END
+                | ifblock elifblocks END
+                | ifblock elifblocks elseblock END
+    '''
+
+    if len(p) == 3:  # IF test THEN stmts END
+        p[0] = IfBlock(
+            p[1][0],
+            p[1][1]
+        )
+    elif len(p) == 4:  # (IfBlock ELSE stmts END)
+        if p[2][0] is None:
+            p[0] = IfBlock(
+                p[1][0],
+                p[1][1],
+                p[2][1:]
+            )
+        else:
+            p[0] = IfBlock(
+                p[1][0],
+                p[1][1],
+                else_suite=p[2]
+            )
+    else:
+        if len(p) > 3:
+            else_suite = p[3]
+        else:
+            else_suite = None
+
+        p[0] = IfBlock(
+            p[1][0],
+            p[1][1],
+            p[2][1:],
+            else_suite
+        )
+
+
+def p_if_elif_block(p):
+    '''
+    ifblock : IF value THEN stmts
+    elifblock : ELIF value THEN stmts
+    '''
+    p[0] = (p[2], p[4])
+
+
+def p_elif_blocks(p):
+    '''
+    EMPTY :
+
+    elifblocks : elifblocks elifblock
+               | EMPTY
+    '''
+    if len(p) == 3:
+        p[0] = list(flatten(p[1:]))
+
+
+def p_else_block(p):
+    '''
+    elseblock : ELSE stmts
+    '''
+    p[0] = p[2]
+
+
+# Value
+precedence = (
+    ('left', 'PLUS', 'MINUS'),
+    ('left', 'TIMES', 'DIVIDE'),
+    ('right', 'UMINUS'),
+)
+
+
+def p_value_binop(p):
+    '''
+    value : value PLUS value
+          | value MINUS value
+          | value TIMES value
+          | value DIVIDE value
+          | value PERCENT value
+          | value AND value
+          | value OR value
+          | value XOR value
+          | value LSHIFT value
+          | value RSHIFT value
+          | value EQEQUAL value
+    '''
+
+    if p[2] == '+':
+        p[0] = ExprAddition(p[1], p[3])
+    elif p[2] == '-':
+        p[0] = ExprSubtraction(p[1], p[3])
+    elif p[2] == '*':
+        p[0] = ExprMultiplication(p[1], p[3])
+    elif p[2] == '/':
+        p[0] = ExprDivision(p[1], p[3])
+    elif p[2] == '%':
+        p[0] = ExprModulo(p[1], p[3])
+    elif p[2] == '&':
+        p[0] = ExprBitAnd(p[1], p[3])
+    elif p[2] == '|':
+        p[0] = ExprBitOr(p[1], p[3])
+    elif p[2] == '^':
+        p[0] = ExprBitXor(p[1], p[3])
+    elif p[2] == '<<':
+        p[0] = ExprBitShiftL(p[1], p[3])
+    elif p[2] == '>>':
+        p[0] = ExprBitShiftR(p[1], p[3])
+    elif p[2] == '==':
+        p[0] = ExprEqual(p[1], p[3])
+
+
+def p_value_uminus(p):
+    '''
+    value : MINUS value %prec UMINUS
+    '''
+    p[0] = type(p[2]).__class__(-p[2].value)
+
+
+def p_value_group(p):
+    '''
+    value : LPAREN value RPAREN
+    '''
+    p[0] = p[2]
+
+
 def p_value(p):
     '''
     value : OBJECT
           | method_call
     '''
     p[0] = p[1]
+
+
+def p_value_bool(p):
+    '''
+    value : TRUE
+          | FALSE
+    '''
+    p[0] = Bool(p[1])
 
 
 def p_value_int(p):
@@ -322,52 +499,39 @@ def p_value_string(p):
 def p_value_list(p):
     '''
     value : LPAREN list_items RPAREN
-          | LIST
     '''
     p[0] = List(p[1:][1])
 
 
 def p_value_list_items(p):
     '''
-    list_items : list_items COMMA list_items
-               | list_items COMMA list_item
+    list_items : list_items COMMA value
+               | value
     '''
-    p[0] = list(flatten(filter(lambda a: a != ',', p[1:])))
+
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = list(flatten(filter(lambda a: a != ',', p[1:])))
 
 
-def p_value_list_item_single(p):
-    '''
-    list_items : list_item
-    '''
-    p[0] = p[1]
-
-
-def p_value_list_item(p):
-    '''
-    list_item : value
-    '''
-    p[0] = p[1]
-
-
-def p_value_var(p):
+def p_value_name(p):
     '''
     value : NAME
     '''
-    p[0] = local_scope[current_scope]['names'][p[1]]
+    p[0] = Name(p[1])
 
 
-def p_value_get_list_item(p):
+def p_value_get_item(p):
     '''
-    value : value LBRACKET value RBRACKET
+    value : value LBRACE value COMMA value RBRACE
+          | value LBRACE value RBRACE
     '''
-    if isinstance(p[1], List):
-        item = p[1].getItem(p[3].value)
 
-        if isinstance(item, Void):
-            throwError(p, 3, 'IndexError: Index out of range ({})'
-                             .format(p[3].value))
+    if len(p) == 5:
+        item = ItemFromIterable(p[1], p[3])
     else:
-        throwError(p, 1, 'TypeError: "{}" object is not iterable'.format(p[1]))
+        item = ItemFromIterable(p[1], p[3], p[5])
 
     p[0] = item
 
@@ -376,26 +540,36 @@ def p_value_get_list_item(p):
 def p_error(p):
     throwError(p, 0, 'Syntax error: {}'.format(p.value))
 
-# Build the parser
-yacc.yacc()
-
 
 # TESTING!
-PRINT_TOKENS = False
-
+# Build the parser
 test_file = open('test.coal')
 code = test_file.readlines()
 src = '\n'.join(code)
 
-if PRINT_TOKENS:
-    lexer.lexer.input(src)
+# lexer = lexer.IndentLexer()
+lexer = lexer.lexer
+lexer.ast = []
+
+DEBUGGING = False
+
+if not DEBUGGING:
+    parser = yacc.yacc(optimize=True)
+else:
+    parser = yacc.yacc()
+    lexer.input(src)
 
     while True:
-        tok = lexer.lexer.token()
+        tok = lexer.token()
 
         if not tok:
             break
 
         print(tok)
 
-yacc.parse(src)
+parser.parse(src)
+
+
+# TODO: Parse AST
+for stmt in lexer.ast:
+    ExecuteCoal(stmt)
