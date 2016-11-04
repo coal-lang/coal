@@ -98,7 +98,9 @@ class CoalVoid(CoalObject):
     def __init__(self, of_type=None, obj_type=None):
         if of_type is None:
             if obj_type is not None:
-                super(self.__class__, self).__init__('Void', 'void', obj_type)
+                super(self.__class__, self).__init__('Void({})'.format(obj_type),
+                                                     'void',
+                                                     obj_type)
             else:
                 super(self.__class__, self).__init__('Void', 'void', 'Void')
         else:
@@ -187,6 +189,7 @@ class CoalString(CoalObject):
     methods = [
         'length_',
         'concat_',
+        'format_',
         'toUpper_',
         'toLower_',
         'replace_with_',
@@ -218,6 +221,17 @@ class CoalString(CoalObject):
 
     def _method_concat_(self, arg):
         return CoalString(self.value + arg.repr('String').value)
+
+    def _method_format_(self, arg):
+        if not isinstance(arg, CoalIterableObject):
+            throwError('TypeError: "{}" object is not iterable.'
+                       .format(arg.object_type))
+
+        names = []
+        for i in range(arg.call('length_', []).value):
+            names.append(arg.iter(CoalInt(i)).repr('String').value)
+
+        return CoalString(self.value.format(*names))
 
     def _method_toUpper_(self):
         return CoalString(self.value.upper())
@@ -295,6 +309,7 @@ class CoalList(CoalIterableObject):
 class CoalBuiltin(CoalObject):
     methods = [
         'print_',
+        'println_',
         'chr_',
         'ord_'
     ]
@@ -329,9 +344,21 @@ class CoalBuiltin(CoalObject):
         _value = arg
 
         if isinstance(_value, CoalString):
-            print(_value.value)
+            sys.stdout.write(_value.value)
         else:
-            print(_value.repr('String').value)
+            sys.stdout.write(_value.repr('String').value)
+
+    def _method_println_(self, arg=None):
+        _value = arg
+
+        if _value is None:
+            sys.stdout.write('\n')
+            return
+
+        if isinstance(_value, CoalString):
+            sys.stdout.write(_value.value + '\n')
+        else:
+            sys.stdout.write(_value.repr('String').value + '\n')
 
     def _method_chr_(self, arg):
         _value = arg

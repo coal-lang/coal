@@ -1,4 +1,4 @@
-# Built-in code:
+// Built-in code:
 class String ->
     init (String value) -> String
         [this string: value]
@@ -9,7 +9,7 @@ class String ->
     end
 
     init fromCharacters:(List chars) -> String
-        foreach chars -> char
+        each chars -> char
             [[this string] concat: char]
     end
 
@@ -34,16 +34,16 @@ class String ->
         def stringAfterReplacing:(String initial) with:(String final) -> String
             return [[this string] replace: initial with: final]
 
-        # ... #
+        // ... //
     end
 end
 
-let helloWorld: String = 'Hello, world!' # This calls `init` without named arguments (first definition above)
+let helloWorld: String = 'Hello, world!' // This calls `init` without named arguments (first definition above)
 
-# `print` always tries to represent arguments as a String
+// `print` always tries to represent arguments as a String
 
 [print: helloWorld]
-# -> Hello, world!
+// -> Hello, world!
 
 [print: [helloWorld stringAfterReplacing: 'world' with: 'John']]
-# -> Hello, John!
+// -> Hello, John!
