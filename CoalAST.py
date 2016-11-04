@@ -4,7 +4,7 @@
  # Coal interpreter prototype
  #
  # Module: Abstract syntax-tree
- # version 0.1
+ # version 0.2
 ##
 
 import sys
@@ -106,8 +106,11 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             scope['names'][stmt.name] = CoalVoid(obj_type=stmt.type)
         else:
             throwError(0, 4, 'TypeError: Unknown type "{}"'.format(stmt.type))
+
+    # Assignment
     elif isinstance(stmt, NameAssign):
-        stmt.value = ExecuteCoal(stmt.value)
+        stmt.value = ExecuteCoal(stmt.value, scope)
+
         if stmt.name not in scope['names']:
             throwError(0, 1, 'NameError: Unknown name "{}"'.format(stmt.name))
 
@@ -121,6 +124,22 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                                          stmt.value.object_type))
 
         scope['names'][stmt.name] = stmt.value
+    elif isinstance(stmt, IterableItemAssign):
+        stmt.index = ExecuteCoal(stmt.index, scope)
+        stmt.value = ExecuteCoal(stmt.value, scope)
+
+        if stmt.name not in scope['names']:
+            throwError(0, 0,
+                       'NameError: Unknown name "{}"'
+                       .format(stmt.name))
+
+        stmt.name = scope['names'][stmt.name]
+
+        if not isinstance(stmt.name, CoalIterableObject):
+            throwError(0, 0, 'Exception: "{}" object is not a writable iterable'
+                       .format(stmt.name.object_type))
+
+        stmt.name.assign(stmt.index, stmt.value)
 
     # Function
     elif isinstance(stmt, FuncDef):
@@ -136,6 +155,31 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
     elif isinstance(stmt, FuncRet):
         return ExecuteCoal(stmt.value, scope)
 
+    # Conditional
+    elif isinstance(stmt, IfBlock):
+        stmt.test = ExecuteCoal(stmt.test, scope)
+
+        if stmt.test.value and not isinstance(stmt.test.value, CoalVoid):
+            for st in stmt.suite:
+                ExecuteCoal(st, scope)
+
+            return
+
+        if stmt.elif_blocks is not None:
+            for block in stmt.elif_blocks:
+                test = ExecuteCoal(block[0], scope)
+
+                if test.value and not isinstance(test.value, CoalVoid):
+                    for st in block[1]:
+                        ExecuteCoal(st, scope)
+
+                    return
+
+
+        if stmt.else_suite is not None:
+            for st in stmt.else_suite:
+                ExecuteCoal(st, scope)
+
     # Expression
     elif type(stmt).__name__ in ['ExprAddition',
                                  'ExprSubtraction',
@@ -147,7 +191,9 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                                  'ExprBitXor',
                                  'ExprBitShiftR',
                                  'ExprBitShiftL',
-                                 'ExprEqual']:
+                                 'ExprEqual',
+                                 'ExprGreater',
+                                 'ExprLess']:
         stmt.a = ExecuteCoal(stmt.a, scope)
         stmt.b = ExecuteCoal(stmt.b, scope)
 
@@ -183,6 +229,10 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             result = stmt.a.value << stmt.b.value
         elif expr_type == 'ExprEqual':
             result = 'true' if stmt.a.value == stmt.b.value else 'false'
+        elif expr_type == 'ExprGreater':
+            result = 'true' if stmt.a.value > stmt.b.value else 'false'
+        elif expr_type == 'ExprLess':
+            result = 'true' if stmt.a.value < stmt.b.value else 'false'
 
         if type(result) == int:
             return CoalInt(result)
@@ -203,7 +253,11 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         elif isinstance(stmt, ItemFromIterable):
             iter_name = ExecuteCoal(stmt.name, scope)
             iter_start = ExecuteCoal(stmt.index, scope)
-            iter_end = ExecuteCoal(stmt.end, scope)
+
+            if stmt.end is None:
+                iter_end = None
+            else:
+                iter_end = ExecuteCoal(stmt.end, scope)
 
             return iter_name.iter(iter_start, iter_end)
         elif isinstance(stmt, Void):
@@ -221,6 +275,9 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                 stmt.value[i] = ExecuteCoal(stmt.value[i], scope)
 
             return CoalList(stmt.value)
+
+    # Empty return
+    return CoalVoid()
 
 
 # For organization sake
@@ -393,6 +450,54 @@ class ExprModulo(CoalAST):
 
 
 class ExprEqual(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprExact(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprNotEqual(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprGreater(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprGreaterEqual(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprLess(CoalAST):
+    def __init__(self,
+                 a,
+                 b):
+        self.a = a
+        self.b = b
+
+
+class ExprLessEqual(CoalAST):
     def __init__(self,
                  a,
                  b):

@@ -63,6 +63,35 @@ class CoalObject(object):
     def repr(self, as_type):
         return self.repr_as[as_type]()
 
+    def _method_length_(self):
+        return CoalInt(len(self.value))
+
+
+# Sub-types
+class CoalIterableObject(CoalObject):
+    def __init__(self, *args):
+        CoalObject.__init__(self, *args)
+
+    def iter(self, start, end=None):
+        try:
+            if end is None:
+                return self.value[start.value]
+            else:
+                return self.__class__(self.value[start.value:end.value])
+        except:
+            return CoalVoid()
+
+    def assign(self, index, value):
+        if index.value == len(self.value) + 1:
+            self.value.append(value)
+        elif index.value <= len(self.value) - 1:
+            self.value[index.value] = value
+        else:
+            throwError('IndexError: List assignment index out of range.')
+
+    def _method_iterate_(self):
+        return CoalList([CoalInt(i) for i in range(self.call('length_', []).value)])
+
 
 # Void
 class CoalVoid(CoalObject):
@@ -85,7 +114,7 @@ class CoalVoid(CoalObject):
 class CoalBool(CoalObject):
     def __init__(self, value, obj_type=None):
         try:
-            if value == 'true':
+            if str(value).lower() == 'true':  # TODO: Fix this fix.
                 boole = True
             else:
                 boole = False
@@ -156,11 +185,15 @@ class CoalFloat(CoalObject):
 # String
 class CoalString(CoalObject):
     methods = [
+        'length_',
         'concat_',
-        'stringToUppercase_',
-        'stringToLowercase_',
+        'toUpper_',
+        'toLower_',
+        'replace_with_',
+        'replace_with_times_',
+        'trim_',
         'stringAfterReplacing_with_',
-        'stringAfterReplacing_with_times_'
+        'stringAfterReplacing_with_times_',
         'stringAfterTrimming_'
     ]
 
@@ -169,10 +202,6 @@ class CoalString(CoalObject):
             super(self.__class__, self).__init__('String',
                                                  'string',
                                                  str(value))
-
-            self.attributes = {
-                'length': CoalInt(len(str(value)))
-            }
 
             self.repr_as['Raw'] = lambda: CoalString('"{}"'.format(self.value))
         except:
@@ -190,11 +219,24 @@ class CoalString(CoalObject):
     def _method_concat_(self, arg):
         return CoalString(self.value + arg.repr('String').value)
 
-    def _method_stringToUppercase_(self):
+    def _method_toUpper_(self):
         return CoalString(self.value.upper())
 
-    def _method_stringToLowercase_(self):
+    def _method_toLower_(self):
         return CoalString(self.value.lower())
+
+    def _method_replace_with_(self, old, new):
+        self.value.replace(old.repr('String').value,
+                           new.repr('String').value)
+
+    def _method_replace_with_times_(self, old, new, times):
+        if not isinstance(times, CoalInt):
+            throwError('TypeError: String method "replace:with:times:"'
+                       ' takes "times:" as "Int".')
+
+        self.value.replace(old.repr('String').value,
+                           new.repr('String').value,
+                           times.value)
 
     def _method_stringAfterReplacing_with_(self, old, new):
         return CoalString(self.value.replace(old.repr('String').value,
@@ -203,7 +245,7 @@ class CoalString(CoalObject):
     def _method_stringAfterReplacing_with_times(self, old, new, times):
         if not isinstance(times, CoalInt):
             throwError('TypeError: String method "stringAfterReplacing:with'
-                       'times:"takes "times:" as "Int".')
+                       'times:" takes "times:" as "Int".')
 
         return CoalString(self.value.replace(old.repr('String').value,
                                              new.repr('String').value,
@@ -216,16 +258,19 @@ class CoalString(CoalObject):
 
 
 # List
-class CoalList(CoalObject):
+class CoalList(CoalIterableObject):
+    methods = [
+        'length_',
+        'iterate_',
+        'append_',
+        'update_'
+    ]
+
     def __init__(self, value, obj_type=None):
         try:
             super(self.__class__, self).__init__('List',
                                                  'list',
                                                  list(value))
-
-            self.attributes = {
-                'length': CoalInt(len(list(value)))
-            }
 
             self.repr_as['String'] = lambda: CoalString('List({})'.format(
                 ', '.join([str(n.repr('Raw').value) for n in self.value]))
@@ -234,14 +279,16 @@ class CoalList(CoalObject):
         except:
             throwTypeError('List', obj_type)
 
-    def iter(self, start, end=None):
-        try:
-            if end is None:
-                return self.value[start.value]
-            else:
-                return self.value[start.value:end.value]
-        except:
-            return CoalVoid()
+    def _method_append_(self, arg):
+        self.value.append(arg)
+
+    def _method_update_(self, arg):
+        if not isinstance(arg, CoalIterableObject):
+            throwError('TypeError: Object "{}" is not iterable.'
+                       .format(arg.object_type))
+
+        for i in range(arg.call('length_', []).value):
+            self.value.append(arg.iter(CoalInt(i)))
 
 
 # Builtins!
