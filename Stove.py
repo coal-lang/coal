@@ -5,7 +5,7 @@
  # Coal interpreter prototype
  #
  # author William "10c8" F.
- # version 0.31
+ # version 0.32
  # copyright MIT
 ##
 
@@ -16,6 +16,9 @@ import ply.yacc as yacc
 
 import lexer
 from CoalAST import *
+
+# Options
+DEBUGGING = True
 
 
 # Utils
@@ -108,7 +111,11 @@ def p_stmt(p):
          | func_ret
          | type_def
          | method_call
+         | forblock
+         | eachblock
+         | whileblock
          | conditional
+         | exit
     '''
     p[0] = p[1]
 
@@ -116,7 +123,7 @@ def p_stmt(p):
 # Variable definition
 def p_var_def(p):
     '''
-    var_def : VAR_DEF NAME WITH TYPE_NAME EQUALS value
+    var_def : VAR_DEF name WITH TYPE_NAME EQUALS value
     '''
 
     # Make the important tokens easy to use
@@ -135,7 +142,7 @@ def p_var_def(p):
 
 def p_var_def_empty(p):
     '''
-    var_def : VAR_DEF NAME WITH TYPE_NAME ASK
+    var_def : VAR_DEF name WITH TYPE_NAME ASK
     '''
 
     var_name = p[2]
@@ -150,21 +157,27 @@ def p_var_def_empty(p):
 # Assignment
 def p_var_assign(p):
     '''
-    var_assign : NAME EQUALS value
+    var_assign : name EQUALS value
+               | name PLUSEQ value
+               | name MINUSEQ value
+               | name TIMESEQ value
+               | name DIVEQ value
     '''
 
     var_name = p[1]
+    var_mode = p[2]
     var_value = p[3]
 
     p[0] = NameAssign(
         var_name,
+        var_mode,
         var_value
     )
 
 
 def p_iterable_item_assign(p):
     '''
-    iter_assign : NAME LBRACE value RBRACE EQUALS value
+    iter_assign : name LBRACE value RBRACE EQUALS value
     '''
 
     iter_name = p[1]
@@ -181,8 +194,8 @@ def p_iterable_item_assign(p):
 # Class definition
 def p_type_def(p):
     '''
-    type_def : TYPE_DEF TYPE_NAME TYPE_EXT TYPE_NAME AS
-             | TYPE_DEF TYPE_NAME AS
+    type_def : CLASS TYPE_NAME EXTENDS TYPE_NAME AS
+             | CLASS TYPE_NAME AS
     '''
     # TODO
 
@@ -190,10 +203,10 @@ def p_type_def(p):
 # Method call
 def p_method_call(p):
     '''
-    method_call : LSQB value NAME call_arglist RSQB
-                | LSQB value NAME RSQB
-                | LSQB NAME call_arglist RSQB
-                | LSQB NAME RSQB
+    method_call : LSQB value name call_arglist RSQB
+                | LSQB value name RSQB
+                | LSQB name call_arglist RSQB
+                | LSQB name RSQB
     '''
 
     # Flatten argument list
@@ -244,7 +257,7 @@ def p_method_call(p):
 
 def p_call_arglist(p):
     '''
-    call_arglist : WITH value NAME call_arglist
+    call_arglist : WITH value name call_arglist
                  | WITH value
     '''
     p[0] = p[1:]
@@ -259,7 +272,7 @@ def p_call_arglist(p):
 # Function definition
 def p_func_def_simple(p):
     '''
-    func_def : DEF NAME AS TYPE_NAME stmts END
+    func_def : DEF name AS TYPE_NAME stmts END
     '''
 
     selector = p[2]
@@ -325,8 +338,8 @@ def p_func_argdef(p):
 
 def p_func_argdef_single(p):
     '''
-    func_argdef : NAME WITH LPAREN TYPE_NAME NAME RPAREN
-                | NAME WITH LPAREN TYPE_NAME RPAREN
+    func_argdef : name WITH LPAREN TYPE_NAME name RPAREN
+                | name WITH LPAREN TYPE_NAME RPAREN
     '''
 
     if len(p) == 6:
@@ -347,6 +360,65 @@ def p_func_ret(p):
         p[0] = FuncRet(Void('Void'))
 
 
+# Loop
+def p_for(p):
+    '''
+    forblock : FOR value COMMA value COMMA value AS name stmts END
+             | FOR value COMMA value AS name stmts END
+    '''
+
+    start = p[2]
+    end = p[4]
+
+    if len(p) == 10:
+        interval = p[6]
+        name = p[8]
+
+        if isinstance(p[9], list):
+            suite = list(flatten(p[9]))
+        else:
+            suite = [p[9]]
+    else:
+        interval = None
+        name = p[6]
+
+        if isinstance(p[7], list):
+            suite = list(flatten(p[7]))
+        else:
+            suite = [p[7]]
+
+    p[0] = ForBlock(
+        start,
+        end,
+        interval,
+        name,
+        suite
+    )
+
+
+def p_each(p):
+    '''
+    eachblock : EACH value AS name stmts END
+    '''
+
+    p[0] = EachBlock(
+        p[2],
+        p[4],
+        list(flatten(p[5]))
+    )
+
+
+def p_while(p):
+    '''
+    whileblock : WHILE value DO stmts END
+    '''
+
+    p[0] = WhileBlock(
+        p[2],
+        list(flatten(p[4]))
+    )
+
+
 # Conditional
 def p_conditional(p):
     '''
@@ -356,7 +428,7 @@ def p_conditional(p):
                 | ifblock elifblocks elseblock END
     '''
 
-    if len(p) == 3:  # IF test THEN stmts END
+    if len(p) == 3:  # IF test DO stmts END
         p[0] = IfBlock(
             p[1][0],
             p[1][1]
@@ -390,8 +462,8 @@ def p_conditional(p):
 
 def p_if_elif_block(p):
     '''
-    ifblock : IF value THEN stmts
-    elifblock : ELIF value THEN stmts
+    ifblock : IF value DO stmts
+    elifblock : ELIF value DO stmts
     '''
     p[0] = (p[2], p[4])
 
@@ -474,6 +546,18 @@ def p_value_uminus(p):
     p[0] = type(p[2]).__class__(-p[2].value)
 
 
+def p_value_list(p):
+    '''
+    value : LPAREN list_items RPAREN
+          | LPAREN RPAREN
+    '''
+
+    if len(p) == 4:
+        p[0] = List(p[2])
+    else:
+        p[0] = List([])
+
+
 def p_value_group(p):
     '''
     value : LPAREN value RPAREN
@@ -518,18 +602,6 @@ def p_value_string(p):
     p[0] = String(p[1])
 
 
-def p_value_list(p):
-    '''
-    value : LPAREN list_items RPAREN
-          | LPAREN RPAREN
-    '''
-
-    if len(p) == 4:
-        p[0] = List(p[1:][1])
-    else:
-        p[0] = List([])
-
-
 def p_value_list_items(p):
     '''
     list_items : list_items COMMA value
@@ -537,14 +609,14 @@ def p_value_list_items(p):
     '''
 
     if len(p) == 2:
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
         p[0] = list(flatten(filter(lambda a: a != ',', p[1:])))
 
 
 def p_value_name(p):
     '''
-    value : NAME
+    value : name
     '''
     p[0] = Name(p[1])
 
@@ -563,6 +635,22 @@ def p_value_get_item(p):
     p[0] = item
 
 
+def p_name(p):
+    '''
+    name : NAME
+         | LETTER_NAME
+    '''
+    p[0] = p[1]
+
+
+# Exit
+def p_exit(p):
+    '''
+    exit : EXIT value
+    '''
+    p[0] = Exit(p[2])
+
+
 # Error rule for syntax errors
 def p_error(p):
     throwError(p, 0, 'Syntax error: {}'.format(p.value))
@@ -577,8 +665,6 @@ src = '\n'.join(code)
 # lexer = lexer.IndentLexer()
 lexer = lexer.lexer
 lexer.ast = []
-
-DEBUGGING = False
 
 if not DEBUGGING:
     parser = yacc.yacc(optimize=True)

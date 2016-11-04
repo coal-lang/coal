@@ -12,6 +12,9 @@ import ply.lex as lex
 
 # Reserved names
 reserved = {
+    # Quit!
+    'exit': 'EXIT',
+
     # Imports
     'import': 'IMP_CALL',
     'from': 'IMP_FROM',
@@ -23,17 +26,17 @@ reserved = {
     'return': 'FUNC_RET',
 
     # Classes
-    'class': 'TYPE_DEF',
-    'extends': 'TYPE_EXT',
-    'init': 'TYPE_INIT',
-    'private': 'TYPE_PRIVATE',
-    'public': 'TYPE_PUBLIC',
-    'repr': 'TYPE_REPR',
+    'class': 'CLASS',
+    'extends': 'EXTENDS',
+    'init': 'INIT',
+    'private': 'PRIVATE',
+    'public': 'PUBLIC',
+    'repr': 'REPR',
 
     # Loops
-    'for': 'LOOP_FOR',
-    'foreach': 'LOOP_FOREACH',
-    'while': 'LOOP_WHILE',
+    'for': 'FOR',
+    'each': 'EACH',
+    'while': 'WHILE',
 
     # Conditionals
     'elif': 'ELIF',
@@ -41,7 +44,7 @@ reserved = {
     'else': 'ELSE',
     'try': 'TRY',
     'except': 'EXCEPT',
-    'then': 'THEN',
+    'do': 'DO',
 
     # Booleans
     'true': 'TRUE',
@@ -55,6 +58,7 @@ tokens = (
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
     'AND', 'OR', 'XOR', 'RSHIFT', 'LSHIFT', 'NOT',
     'EQEQUAL', 'GREATER', 'LESS',
+    'PLUSEQ', 'MINUSEQ', 'TIMESEQ', 'DIVEQ',
     'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LSQB', 'RSQB',
     'TYPE_NAME',
 )
@@ -66,12 +70,14 @@ complex = (
     'STRING',
     'LIST',
     'OBJECT',
-    'NAME',
+    'NAME', 'LETTER_NAME',
     'INDENT', 'DEDENT',
 )
 
 tokens += tuple(reserved.values())
 tokens += complex
+
+t_LETTER_NAME = r'[a-z_]'
 
 # For tests
 t_EQEQUAL = r'\=\='
@@ -80,7 +86,7 @@ t_LESS = r'\<'
 
 # Simple tokens
 t_WITH = r':'
-t_AS = r'->'
+t_AS = r'\-\>'
 t_ASK = r'\?'
 t_COMMA = r','
 t_EQUALS = r'\='
@@ -92,8 +98,12 @@ t_RBRACE = r'\}'
 t_TYPE_NAME = r'\b[A-Z][a-zA-Z]+'
 
 # For expressions
+t_PLUSEQ = r'\+\='
+t_MINUSEQ = r'\-\='
+t_TIMESEQ = r'\*\='
+t_DIVEQ = r'\/\='
 t_PLUS = r'\+'
-t_MINUS = r'\-^\>'
+t_MINUS = r'\-'
 t_TIMES = r'\*'
 t_DIVIDE = r'\/'
 t_AND = r'\&'
@@ -262,13 +272,17 @@ def track_tokens_filter(lexer, tokens):
                 at_line_start = False
                 indent = MUST_INDENT
                 token.must_indent = False
-        # elif token.type == "NEWLINE":
-        #     at_line_start = True
+        elif token.type == "DO":
+            at_line_start = False
+            indent = MUST_INDENT
+            token.must_indent = False
+        elif token.type == "NEWLINE":
+            at_line_start = True
 
-        #     if indent == MAY_INDENT:
-        #         indent = MUST_INDENT
+            if indent == MAY_INDENT:
+                indent = MUST_INDENT
 
-        #     token.must_indent = False
+            token.must_indent = False
         elif token.type == "SPACE":
             assert token.at_line_start is True
 

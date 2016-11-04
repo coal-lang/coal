@@ -2,7 +2,7 @@
 def replaceInString:(String str) word:(String) with:(String) -> Bool
     def writeMessage:(String msg) -> Void
         def actuallyPrint:(String it) -> Void
-            [print: it]
+            [println: it]
         end
 
         [actuallyPrint: msg]
@@ -16,7 +16,7 @@ end
 let result: Any?
 result = [replaceInString: "Hello, world!" word: "world" with: "Coal"]
 
-[print: ["The call returned: " concat: result]]
+[println: ["The call returned: " concat: result]]
 
 
 // Conditionals
@@ -25,14 +25,14 @@ let test: Any?
 test = 42
 // test = 43
 
-if test == true then
-    [print: "It's the truth!"]
-elif test == 42 then
-    [print: "It's the meaning of life!"]
-elif test > 42 then
-    [print: "It's more than the meaning of life!"]
+if test == true do
+    [println: "It's the truth!"]
+elif test == 42 do
+    [println: "It's the meaning of life!"]
+elif test > 42 do
+    [println: "It's more than the meaning of life!"]
 else
-    [print: "It's a lie!"]
+    [println: "It's a lie!"]
 end
 
 
@@ -41,22 +41,58 @@ let fruits: List = ("Apple", "Banana")
 let more_fruits: List = (fruits, "Cocoa", "Melon", "Peach")
 let bla_bla: List = (0, 1, more_fruits)
 
-[print: fruits]
-[print: fruits{1}]
+[println: fruits]
+[println: fruits{1}]
 
-[print: more_fruits]
-[print: more_fruits{0}]
-[print: more_fruits{0}{1}]
+[println: more_fruits]
+[println: more_fruits{0}]
+[println: more_fruits{0}{1}]
 
 let a_list: List = (0, 1, 2, 3, 4, 5)
 
-[print: a_list]
+[println: a_list]
 
 a_list{2} = "Two"
-[print: a_list]
+[println: a_list]
 
 let other_list: List = (6, 7, 8, 9)
 [a_list update: other_list]
-[print: a_list]
+[println: a_list]
 
-[print: [a_list{3,-1} iterate]]
+[println: a_list{2,-1}]
+
+
+// Loops
+let colors: List = ("red", "yellow", "brown", "green", "yellow")
+let fruits: List = ("apple", "banana", "coconut", "melon", "peach")
+
+let items: List?
+
+for 0, [fruits length] - 1 -> i
+    items = (colors{i}, fruits{i})
+
+    if i == 0 do
+        [print: ["I have a {} {}, " format: items]]
+    elif i < [fruits length] - 1 do
+        [print: ["a {} {}, " format: items]]
+    else
+        [println: ["and I have a {} {}, too." format: items]]
+    end
+end
+
+// Instead of using
+//  for 0, [fruits length] - 1 -> i
+// You can feed a range to "each" using
+//  each [fruits iterate] -> i
+
+each [fruits iterate] -> i
+    items = (colors{i}, fruits{i})
+
+    if i == 0 do
+        [print: ["I have a {} {}, " format: items]]
+    elif i < [fruits length] - 1 do
+        [print: ["a {} {}, " format: items]]
+    else
+        [println: ["and I have a {} {}, too." format: items]]
+    end
+end
