@@ -1,35 +1,25 @@
-// let fruits: List = ("Apple", "Banana")
-// let more_fruits: List = (fruits, "Cocoa", "Melon", "Peach")
-// let bla_bla: List = (0, 1, more_fruits)
+// Defining functions
+def replaceInString:(String str) word:(String) with:(String) -> Bool
+    def writeMessage:(String msg) -> Void
+        def actuallyPrint:(String it) -> Void
+            [print: it]
+        end
 
-// [print: fruits]
-// [print: fruits{1}]
+        [actuallyPrint: msg]
+    end
 
-// [print: more_fruits]
-// [print: more_fruits{0}]
-// [print: more_fruits{0}{1}]
+    [writeMessage: [str stringAfterReplacing: word with: with]]
 
+    return true
+end
 
-// def replaceInString:(String str) word:(String) with:(String) -> Bool
-//     def writeMessage:(String msg) -> Void
-//         def actuallyPrint:(String it) -> Void
-//             [print: it]
-//         end
+let result: Any?
+result = [replaceInString: "Hello, world!" word: "world" with: "Coal"]
 
-//         [actuallyPrint: msg]
-//     end
-
-//     [writeMessage: [str stringAfterReplacing: word with: with]]
-
-//     return true
-// end
-
-// let result: Any?
-// result = [replaceInString: "Hello, world!" word: "world" with: "Coal"]
-
-// [print: ["The call returned: " concat: result]]
+[print: ["The call returned: " concat: result]]
 
 
+// Conditionals
 let test: Any?
 // test = true
 test = 42
@@ -46,15 +36,27 @@ else
 end
 
 
-// let a_list: List = (0, 1, 2, 3, 4, 5)
+// Iterable objects
+let fruits: List = ("Apple", "Banana")
+let more_fruits: List = (fruits, "Cocoa", "Melon", "Peach")
+let bla_bla: List = (0, 1, more_fruits)
 
-// [print: a_list]
+[print: fruits]
+[print: fruits{1}]
 
-// a_list{2} = "Two"
-// [print: a_list]
+[print: more_fruits]
+[print: more_fruits{0}]
+[print: more_fruits{0}{1}]
 
-// let other_list: List = (6, 7, 8, 9)
-// [a_list update: other_list]
-// [print: a_list]
+let a_list: List = (0, 1, 2, 3, 4, 5)
 
-// [print: [a_list{3,-1} iterate]]
+[print: a_list]
+
+a_list{2} = "Two"
+[print: a_list]
+
+let other_list: List = (6, 7, 8, 9)
+[a_list update: other_list]
+[print: a_list]
+
+[print: [a_list{3,-1} iterate]]

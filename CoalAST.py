@@ -114,17 +114,19 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         if stmt.name not in scope['names']:
             throwError(0, 1, 'NameError: Unknown name "{}"'.format(stmt.name))
 
-        if stmt.name not in scope['names']:
-            throwError(0, 0,
-                       'NameError: Unknown name "{}"'
-                       .format(stmt.name))
+        if isinstance(scope['names'][stmt.name], CoalVoid):
+            var_type = scope['names'][stmt.name].value
 
-        var_type = scope['names'][stmt.name].value
+            if var_type != 'Any'\
+               and var_type != stmt.value.object_type:
+                throwError(0, 3, 'TypeError: Wrong value type for Void({}): {}'
+                                 .format(var_type, stmt.value.object_type))
+        else:
+            var_type = scope['names'][stmt.name].object_type
 
-        if var_type != 'Any'\
-            and var_type != stmt.value.object_type:
-            throwError(0, 3, 'TypeError: Wrong value type for Void({}): {}'
-                             .format(var_type, stmt.value.object_type))
+            if var_type != stmt.value.object_type:
+                throwError(0, 3, 'TypeError: Wrong value type for {}: {}'
+                                 .format(var_type, stmt.value.object_type))
 
         scope['names'][stmt.name] = stmt.value
     elif isinstance(stmt, IterableItemAssign):
