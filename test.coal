@@ -31,8 +31,8 @@
 
 
 let test: Any?
-test = true
-// test = 42
+// test = true
+test = 42
 // test = 43
 
 if test == true then
