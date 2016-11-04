@@ -5,7 +5,7 @@
  # Coal interpreter prototype
  #
  # author William "10c8" F.
- # version 0.3
+ # version 0.31
  # copyright MIT
 ##
 
@@ -103,13 +103,13 @@ def p_stmt(p):
     '''
     stmt : var_def
          | var_assign
+         | iter_assign
          | func_def
          | func_ret
          | type_def
          | method_call
          | conditional
     '''
-    # p.lexer.ast.append(p[1])
     p[0] = p[1]
 
 
@@ -138,7 +138,6 @@ def p_var_def_empty(p):
     var_def : VAR_DEF NAME WITH TYPE_NAME ASK
     '''
 
-    # Make the important tokens easy to use
     var_name = p[2]
     var_type = p[4]
 
@@ -148,6 +147,7 @@ def p_var_def_empty(p):
     )
 
 
+# Assignment
 def p_var_assign(p):
     '''
     var_assign : NAME EQUALS value
@@ -159,6 +159,22 @@ def p_var_assign(p):
     p[0] = NameAssign(
         var_name,
         var_value
+    )
+
+
+def p_iterable_item_assign(p):
+    '''
+    iter_assign : NAME LBRACE value RBRACE EQUALS value
+    '''
+
+    iter_name = p[1]
+    iter_index = p[3]
+    iter_value = p[6]
+
+    p[0] = IterableItemAssign(
+        iter_name,
+        iter_index,
+        iter_value
     )
 
 
@@ -419,6 +435,8 @@ def p_value_binop(p):
           | value LSHIFT value
           | value RSHIFT value
           | value EQEQUAL value
+          | value GREATER value
+          | value LESS value
     '''
 
     if p[2] == '+':
@@ -443,6 +461,10 @@ def p_value_binop(p):
         p[0] = ExprBitShiftR(p[1], p[3])
     elif p[2] == '==':
         p[0] = ExprEqual(p[1], p[3])
+    elif p[2] == '>':
+        p[0] = ExprGreater(p[1], p[3])
+    elif p[2] == '<':
+        p[0] = ExprLess(p[1], p[3])
 
 
 def p_value_uminus(p):
@@ -499,8 +521,13 @@ def p_value_string(p):
 def p_value_list(p):
     '''
     value : LPAREN list_items RPAREN
+          | LPAREN RPAREN
     '''
-    p[0] = List(p[1:][1])
+
+    if len(p) == 4:
+        p[0] = List(p[1:][1])
+    else:
+        p[0] = List([])
 
 
 def p_value_list_items(p):

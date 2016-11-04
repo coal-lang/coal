@@ -54,7 +54,7 @@ tokens = (
     'SPACE', 'COMMA', 'EQUALS', 'BAR', 'NOT_EQUAL', 'PERCENT',
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
     'AND', 'OR', 'XOR', 'RSHIFT', 'LSHIFT', 'NOT',
-    'EQEQUAL', 'GREATER', 'LESSER',
+    'EQEQUAL', 'GREATER', 'LESS',
     'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LSQB', 'RSQB',
     'TYPE_NAME',
 )
@@ -75,8 +75,8 @@ tokens += complex
 
 # For tests
 t_EQEQUAL = r'\=\='
-t_GREATER = r'^\-\>'
-t_LESSER = r'\<'
+t_GREATER = r'\>'
+t_LESS = r'\<'
 
 # Simple tokens
 t_WITH = r':'
