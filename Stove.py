@@ -5,7 +5,7 @@
  # Coal interpreter prototype
  #
  # author William "10c8" F.
- # version 0.32
+ # version 0.33
  # copyright MIT
 ##
 
@@ -15,10 +15,12 @@ import collections
 import ply.yacc as yacc
 
 import lexer
+import CoalAST
+
 from CoalAST import *
 
 # Options
-DEBUGGING = True
+DEBUGGING = False
 
 
 # Utils
@@ -109,11 +111,12 @@ def p_stmt(p):
          | iter_assign
          | func_def
          | func_ret
-         | type_def
          | method_call
          | forblock
          | eachblock
          | whileblock
+         | break
+         | next
          | conditional
          | exit
     '''
@@ -194,10 +197,49 @@ def p_iterable_item_assign(p):
 # Class definition
 def p_type_def(p):
     '''
-    type_def : CLASS TYPE_NAME EXTENDS TYPE_NAME AS
-             | CLASS TYPE_NAME AS
+    type_def : CLASS TYPE_NAME AS TYPE_NAME stmts END
     '''
-    # TODO
+
+    # TODO: A nice list.
+    # [ ] Make the process less confusing.
+    # [ ] Add support for extending classes other than "Object".
+
+    name = p[2]
+    extends = p[4]
+
+    if isinstance(p[5], list):
+        suite = list(flatten(p[5]))
+    else:
+        suite = [p[5]]
+
+    p[0] = TypeDef(
+        name,
+        extends,
+        suite
+    )
+
+
+def p_type_init_def(p):
+    '''
+    type_init_def : INIT func_argdefs stmts END
+    '''
+
+    selectors = p[2]
+    selector_names = [s[0] for s in selectors]
+    selector_types = [s[1] for s in selectors]
+    selector_aliases = [s[2] if len(s) > 2 else None for s in selectors]
+
+    if isinstance(p[3], list):
+        suite = list(flatten(p[3]))
+    else:
+        suite = [p[3]]
+
+    p[0] = TypeInitDef(
+        selector_names,
+        selector_types,
+        selector_aliases,
+        suite
+    )
 
 
 # Method call
@@ -220,7 +262,7 @@ def p_method_call(p):
         p[3] = []
 
     if not isinstance(p[2], CoalAST):
-        selectors = '{}_'.format(p[2])
+        selectors = '{}:'.format(p[2])
 
         if len(p[3]):
             call_args = [v for v in list(flatten(p[3]))[:] if v != ':']
@@ -228,7 +270,7 @@ def p_method_call(p):
 
             if len(call_args) > 2:
                 for i in range(1, len(call_args), 2):
-                    selectors += '{}_'.format(call_args[i])
+                    selectors += '{}:'.format(call_args[i])
                     selector_args.append(call_args[i+1])
         else:
             selector_args = []
@@ -243,10 +285,19 @@ def p_method_call(p):
         selector_args = []
 
         for i in range(0, len(call_args), 2):
-            selectors += '{}_'.format(call_args[i])
+            selectors += '{}:'.format(call_args[i])
 
             if len(call_args) > 1:
                 selector_args.append(call_args[i+1])
+
+        if isinstance(p[2], Name):
+            if p[2].name == 'self':
+                p[0] = SelfAssign(
+                    selectors,
+                    selector_args
+                )
+
+                return
 
         p[0] = ObjectMethodCall(
             p[2],
@@ -255,10 +306,38 @@ def p_method_call(p):
         )
 
 
+def p_type_call(p):
+    '''
+    type_call : LSQB TYPE_NAME name call_arglist RSQB
+              | LSQB TYPE_NAME RSQB
+    '''
+
+    if len(p) == 4:
+        p[0] = TypeCall(
+            p[2]
+        )
+    else:
+        call_args = [v for v in list(flatten(p[4]))[:] if v != ':']
+        selectors = '{}:'.format(p[3])
+        selector_args = [call_args[0]]
+
+        for i in range(1, len(call_args), 2):
+            selectors += '{}:'.format(call_args[i])
+
+            if len(call_args) > 1:
+                selector_args.append(call_args[i+1])
+
+        p[0] = TypeCall(
+            p[2],
+            selectors,
+            selector_args
+        )
+
+
 def p_call_arglist(p):
     '''
-    call_arglist : WITH value name call_arglist
-                 | WITH value
+    call_arglist : WITH special_value name call_arglist
+                 | WITH special_value
     '''
     p[0] = p[1:]
 
@@ -267,6 +346,18 @@ def p_call_arglist(p):
     #     p[0] = p[1:]
     # else:
     #     p[0] = p[1:len(p)-1] + p[len(p)-1]
+
+
+def p_special_value(p):
+    '''
+    special_value : value
+                  | AMPERSAND name
+    '''
+
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = NameAsSelector(p[2])
 
 
 # Function definition
@@ -298,7 +389,7 @@ def p_func_def(p):
     func_def : DEF func_argdefs AS TYPE_NAME stmts END
     '''
 
-    # TODO
+    # Version history:
     # 0.2 - It's still a work in progress.
     # 0.3 - It seems stable now.
 
@@ -419,6 +510,20 @@ def p_while(p):
     )
 
 
+def p_break(p):
+    '''
+    break : BREAK
+    '''
+    p[0] = FlowBreak()
+
+
+def p_next(p):
+    '''
+    next : NEXT
+    '''
+    p[0] = FlowNext()
+
+
 # Conditional
 def p_conditional(p):
     '''
@@ -431,30 +536,36 @@ def p_conditional(p):
     if len(p) == 3:  # IF test DO stmts END
         p[0] = IfBlock(
             p[1][0],
-            p[1][1]
+            list(flatten(p[1][1]))
         )
     elif len(p) == 4:  # (IfBlock ELSE stmts END)
         if p[2][0] is None:
+            for i in range(1, len(p[2])):
+                p[2][i] = (p[2][i][0], list(flatten(p[2][i][1])))
+
             p[0] = IfBlock(
                 p[1][0],
-                p[1][1],
+                list(flatten(p[1][1])),
                 p[2][1:]
             )
         else:
             p[0] = IfBlock(
                 p[1][0],
-                p[1][1],
-                else_suite=p[2]
+                list(flatten(p[1][1])),
+                else_suite=list(flatten(p[2]))
             )
     else:
         if len(p) > 3:
-            else_suite = p[3]
+            else_suite = list(flatten(p[3]))
         else:
             else_suite = None
 
+        for i in range(1, len(p[2])):
+            p[2][i] = (p[2][i][0], list(flatten(p[2][i][1])))
+
         p[0] = IfBlock(
             p[1][0],
-            p[1][1],
+            list(flatten(p[1][1])),
             p[2][1:],
             else_suite
         )
@@ -507,8 +618,11 @@ def p_value_binop(p):
           | value LSHIFT value
           | value RSHIFT value
           | value EQEQUAL value
+          | value NOT_EQUAL value
           | value GREATER value
           | value LESS value
+          | value EQGREATER value
+          | value EQLESS value
     '''
 
     if p[2] == '+':
@@ -533,10 +647,16 @@ def p_value_binop(p):
         p[0] = ExprBitShiftR(p[1], p[3])
     elif p[2] == '==':
         p[0] = ExprEqual(p[1], p[3])
+    elif p[2] == '!=':
+        p[0] = ExprNotEqual(p[1], p[3])
     elif p[2] == '>':
         p[0] = ExprGreater(p[1], p[3])
     elif p[2] == '<':
         p[0] = ExprLess(p[1], p[3])
+    elif p[2] == '>=':
+        p[0] = ExprEqualGreater(p[1], p[3])
+    elif p[2] == '<=':
+        p[0] = ExprEqualLess(p[1], p[3])
 
 
 def p_value_uminus(p):
@@ -569,6 +689,7 @@ def p_value(p):
     '''
     value : OBJECT
           | method_call
+          | type_call
     '''
     p[0] = p[1]
 
@@ -605,6 +726,7 @@ def p_value_string(p):
 def p_value_list_items(p):
     '''
     list_items : list_items COMMA value
+               | list_items COMMA
                | value
     '''
 
@@ -683,6 +805,5 @@ else:
 parser.parse(src)
 
 
-# TODO: Parse AST
 for stmt in lexer.ast:
     ExecuteCoal(stmt)
