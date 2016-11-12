@@ -162,18 +162,10 @@ def t_INT(t):
 
 
 # Read in a string
-def t_STRING(t):  # HACK
-    # r'([\'"]).+?\1'
-    # r'\"([^\\"]|(\\.))*\"'
-    # r'"([^\\"]+|\\"|\\n|\\\\)*"'
+def t_STRING(t):
     r'\"([^\\\n]|(\\.))*?\"'
 
-    t.value = t.value[1:-1]\
-              .replace('\\\\', '\\')\
-              .replace('\\t', '\t')\
-              .replace('\\r', '\r')\
-              .replace('\\n', '\n')\
-              .replace('\\"', '\"')
+    t.value = bytes(t.value[1:-1], 'latin-1').decode('unicode_escape')
     return t
 
 
