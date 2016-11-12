@@ -165,9 +165,15 @@ def t_INT(t):
 def t_STRING(t):  # HACK
     # r'([\'"]).+?\1'
     # r'\"([^\\"]|(\\.))*\"'
-    r'"([^\\"]+|\\"|\\n|\\\\)*"'
+    # r'"([^\\"]+|\\"|\\n|\\\\)*"'
+    r'\"([^\\\n]|(\\.))*?\"'
 
-    t.value = bytes(t.value[1:-1], 'utf-8').decode('unicode-escape')
+    t.value = t.value[1:-1]\
+              .replace('\\\\', '\\')\
+              .replace('\\t', '\t')\
+              .replace('\\r', '\r')\
+              .replace('\\n', '\n')\
+              .replace('\\"', '\"')
     return t
 
 
