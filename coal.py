@@ -837,7 +837,7 @@ if len(sys.argv) < 2:
 
             # Check if we're entering a complex block
             elif any(code.lstrip().startswith(n) for n in ['def', 'if', 'for',
-                                                           'each']):
+                                                           'each', 'while']):
                 depth = 4
 
                 while True:
@@ -859,7 +859,8 @@ if len(sys.argv) < 2:
                     elif any(line.lstrip().startswith(n) for n in ['def',
                                                                    'if',
                                                                    'for',
-                                                                   'each']):
+                                                                   'each',
+                                                                   'while']):
                         depth += 4
                     elif any(line.lstrip().startswith(n) for n in ['elif',
                                                                    'else']):
