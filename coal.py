@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #: vim set encoding=utf-8 :
 ##
- # Stove
- # Coal interpreter prototype
+ # Coal
+ # Python implementation of the Coal language
  #
  # author William "10c8" F.
  # version 0.33
@@ -11,13 +11,22 @@
 
 # Imports
 import sys
+import re
 import collections
 import ply.yacc as yacc
 
 import lexer
+<<<<<<< HEAD:Stove.py
 import CoalAST
 
 from CoalAST import *
+=======
+
+from ast import *
+
+# Options
+DEBUGGING = False
+>>>>>>> master:coal.py
 
 # Options
 DEBUGGING = False
@@ -198,6 +207,7 @@ def p_iterable_item_assign(p):
 def p_type_def(p):
     '''
     type_def : CLASS TYPE_NAME AS TYPE_NAME stmts END
+<<<<<<< HEAD:Stove.py
     '''
 
     # TODO: A nice list.
@@ -224,6 +234,34 @@ def p_type_init_def(p):
     type_init_def : INIT func_argdefs stmts END
     '''
 
+=======
+    '''
+
+    # TODO: A nice list.
+    # [ ] Make the process less confusing.
+    # [ ] Add support for extending classes other than "Object".
+
+    name = p[2]
+    extends = p[4]
+
+    if isinstance(p[5], list):
+        suite = list(flatten(p[5]))
+    else:
+        suite = [p[5]]
+
+    p[0] = TypeDef(
+        name,
+        extends,
+        suite
+    )
+
+
+def p_type_init_def(p):
+    '''
+    type_init_def : INIT func_argdefs stmts END
+    '''
+
+>>>>>>> master:coal.py
     selectors = p[2]
     selector_names = [s[0] for s in selectors]
     selector_types = [s[1] for s in selectors]
@@ -780,9 +818,16 @@ def p_error(p):
 
 # TESTING!
 # Build the parser
-test_file = open('test.coal')
-code = test_file.readlines()
-src = '\n'.join(code)
+if len(sys.argv) < 2:
+    print('The REPL isn\'t ready yet. :(')
+    print('Please specify a file to run.')
+    print('Example: coal myprogram.coal')
+
+    sys.exit()
+
+test_file = open(sys.argv[1], 'r', encoding='utf-8')
+src = test_file.read()
+test_file.close()
 
 # lexer = lexer.IndentLexer()
 lexer = lexer.lexer

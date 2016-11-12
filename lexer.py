@@ -1,7 +1,7 @@
 #: vim set encoding=utf-8 :
 ##
- # Stove
- # Coal interpreter prototype
+ # Coal
+ # Python implementation of the Coal language
  #
  # Module: Lexer
  # version 0.31

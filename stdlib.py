@@ -1,9 +1,9 @@
 #: vim set encoding=utf-8 :
 ##
- # Stove
- # Coal interpreter prototype
+ # Coal
+ # Python implementation of the Coal language
  #
- # Module: Built-in Objects
+ # Module: Standard Library
  # version 0.21
 ##
 
