@@ -776,8 +776,9 @@ if len(sys.argv) < 2:
     readline.parse_and_bind('set editing-mode vi')
 
     # And tab completion
-    keywords = ['let', 'def', 'if', 'elif', 'else', 'end', 'help',
-                'copyright', 'credits', 'license', 'quit']
+    keywords = ['let', 'def', 'if', 'elif', 'else', 'for', 'each', 'while',
+                'break', 'next', 'return', 'type', 'end', 'help', 'copyright',
+                'credits', 'license', 'quit']
 
     def completer(text, state):
         options = [i for i in keywords if i.startswith(text)]
