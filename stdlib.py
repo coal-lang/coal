@@ -4,7 +4,7 @@
  # Python implementation of the Coal language
  #
  # Module: Standard Library
- # version 0.21
+ # version 0.22
 ##
 
 # Imports
@@ -443,6 +443,8 @@ class CoalBuiltin(CoalObject):
 
         # self.public = list(self.public) + [
         self.public += [
+            'license:',
+            'quit:',
             'print:',
             'print:sep:',
             'chr:',
@@ -451,13 +453,41 @@ class CoalBuiltin(CoalObject):
 
         # self.methods = copy.deepcopy(self.methods)
         self.methods.update({
+            'license:': self._method_license_,
+            'quit:': self._method_quit_,
             'print:': self._method_print_,
             'print:sep:': self._method_print_sep_,
             'chr:': self._method_chr_,
             'ord:': self._method_ord_
         })
 
-    def _method_print_(self, value):
+    def _method_license_(self):
+        print('''MIT License
+
+Copyright (c) 2016 William F. de Araújo
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.''')
+
+    def _method_quit_(self, status=CoalInt(0)):
+        sys.exit(status.value)
+
+    def _method_print_(self, value=CoalString('')):
         if isinstance(value, CoalString):
             print(value.value)
         else:

@@ -2,7 +2,7 @@
 parsetab.py
 pyparser.py
 parser.out
-*!.coal
+*-.coal
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

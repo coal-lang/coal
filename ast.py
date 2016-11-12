@@ -365,8 +365,8 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         iterable = ExecuteCoal(stmt.iterable, scope)
 
         if not isinstance(iterable, CoalIterableObject):
-            throwError('TypeError: "{}" object is not iterable.'
-                       .format(iterable.object_type))
+            throwError(0, 0, 'TypeError: "{}" object is not iterable.'
+                             .format(iterable.object_type))
 
         if stmt.name in scope['names']:
             var_type = scope['names'][stmt.name].object_type
@@ -529,17 +529,6 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                 value.append(ExecuteCoal(stmt.value[i], scope))
 
             return CoalList(value)
-
-    # Exit the program
-    elif isinstance(stmt, Exit):
-        result = ExecuteCoal(stmt.value, scope)
-
-        if not isinstance(result, CoalInt) and\
-           not isinstance(result, CoalBool):
-            throwError(0, 0,
-                       'TypeError: The program must return "Int" or "Bool".')
-
-        sys.exit(result.value)
 
     # Empty return
     return CoalVoid()
@@ -910,10 +899,3 @@ class List(Value):
     def __init__(self,
                  value):
         self.value = list(value)
-
-
-# Exit
-class Exit(CoalAST):
-    def __init__(self,
-                 value):
-        self.value = value

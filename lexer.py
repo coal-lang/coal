@@ -12,9 +12,6 @@ import ply.lex as lex
 
 # Reserved names
 reserved = {
-    # Quit!
-    'exit': 'EXIT',
-
     # Imports
     'import': 'IMP_CALL',
     'from': 'IMP_FROM',

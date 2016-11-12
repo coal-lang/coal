@@ -4,8 +4,8 @@
  # Coal
  # Python implementation of the Coal language
  #
- # author William "10c8" F.
- # version 0.33
+ # author William F. de Araújo
+ # version 0.34
  # copyright MIT
 ##
 
@@ -118,7 +118,6 @@ def p_stmt(p):
          | break
          | next
          | conditional
-         | exit
     '''
     p[0] = p[1]
 
@@ -765,28 +764,120 @@ def p_name(p):
     p[0] = p[1]
 
 
-# Exit
-def p_exit(p):
-    '''
-    exit : EXIT value
-    '''
-    p[0] = Exit(p[2])
-
-
 # Error rule for syntax errors
 def p_error(p):
     throwError(p, 0, 'Syntax error: {}'.format(p.value))
 
 
-# TESTING!
-# Build the parser
+# HACK: A simple REPL
 if len(sys.argv) < 2:
-    print('The REPL isn\'t ready yet. :(')
-    print('Please specify a file to run.')
-    print('Example: coal myprogram.coal')
+    # We'll use readline to enable command history
+    import readline
+    readline.parse_and_bind('tab: complete')
+    readline.parse_and_bind('set editing-mode vi')
 
-    sys.exit()
+    # Build our parser
+    lexer = lexer.lexer
+    lexer.ast = []
 
+    parser = yacc.yacc(optimize=True)
+
+    # Greet the user, of course.
+    print('Coal 0.34 (nightly, Nov 12 2016)')
+    print('Type "help", "copyright", "credits" or "license" for more'
+            ' information.')
+
+    # REPL
+    while True:
+        try:
+            code = input('>>> ')
+
+            # Skip empty lines
+            if code == '':
+                continue
+
+            # Keywords
+            elif code == 'help':
+                print('There\'s no help in the REPL yet, but you can check the online'
+                    ' documentation at coal-lang.github.io/coal!')
+                continue
+            elif code == 'copyright':
+                print('Copyright (c) 2016 William F.')
+                print('All rights reserved.')
+                continue
+            elif code == 'credits':
+                print('Thanks to @dgelessus and everyone in the Pythonista community'
+                    ' for supporting Coal development. See coal-lang.github.io/coal'
+                    ' for more information.')
+                continue
+            elif code == 'license':
+                print('Type [license] to see the full license text.')
+                continue
+            elif code == 'quit':
+                print('Use [quit] or Ctrl-D (i.e. EOF) to exit.')
+                continue
+
+            # Check if we're entering a complex block
+            elif any(code.lstrip().startswith(n) for n in ['def', 'if', 'for',
+                                                        'each']):
+                depth = 4
+
+                while True:
+                    # Automatic indentation (fancy!)
+                    readline.set_startup_hook(
+                        lambda: readline.insert_text(' ' * depth)
+                    )
+
+                    try:
+                        line = input('... ')
+                    finally:
+                        readline.set_startup_hook()
+
+                    # Skip empty lines
+                    if line.lstrip() == '':
+                        continue
+
+                    # Do we need more indentation?
+                    elif any(line.lstrip().startswith(n) for n in ['def',
+                                                                'if',
+                                                                'for',
+                                                                'each']):
+                        depth += 4
+                    elif any(line.lstrip().startswith(n) for n in ['elif',
+                                                                'else']):
+                        depth = depth
+                    else:
+                        depth = len(line) - len(line.lstrip())
+
+                    # Convert tabs to spaces
+                    line = line.replace('\t', '    ')
+
+                    # Restore newline
+                    line += '\n'
+
+                    # Insert the line on the block
+                    code += line
+
+                    if line.lstrip().startswith('end'):
+                        if depth == 0:
+                            parser.parse(code)
+                            break
+                        else:
+                            depth -= 4
+            else:
+                parser.parse(code)
+
+            # Execute the block
+            for stmt in lexer.ast:
+                ExecuteCoal(stmt)
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt')
+            continue
+        except EOFError:
+            # Exit on CTRL-D
+            sys.exit()
+
+# Build the parser
 test_file = open(sys.argv[1], 'r', encoding='utf-8')
 src = test_file.read()
 test_file.close()
@@ -810,7 +901,6 @@ else:
         print(tok)
 
 parser.parse(src)
-
 
 for stmt in lexer.ast:
     ExecuteCoal(stmt)
