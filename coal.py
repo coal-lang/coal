@@ -773,8 +773,21 @@ def p_error(p):
 if len(sys.argv) < 2:
     # We'll use readline to enable command history
     import readline
-    readline.parse_and_bind('tab: complete')
     readline.parse_and_bind('set editing-mode vi')
+
+    # And tab completion
+    keywords = ['let', 'def', 'if', 'elif', 'else', 'end', 'help',
+                'copyright', 'credits', 'license', 'quit']
+
+    def completer(text, state):
+        options = [i for i in keywords if i.startswith(text)]
+        if state < len(options):
+            return options[state]
+        else:
+            return None
+
+    readline.parse_and_bind("tab: complete")
+    readline.set_completer(completer)
 
     # Build our parser
     lexer = lexer.lexer
@@ -785,7 +798,7 @@ if len(sys.argv) < 2:
     # Greet the user, of course.
     print('Coal 0.34 (nightly, Nov 12 2016)')
     print('Type "help", "copyright", "credits" or "license" for more'
-            ' information.')
+          ' information.')
 
     # REPL
     while True:
@@ -798,17 +811,21 @@ if len(sys.argv) < 2:
 
             # Keywords
             elif code == 'help':
-                print('There\'s no help in the REPL yet, but you can check the online'
-                    ' documentation at coal-lang.github.io/coal!')
+                print('You can access the command history with the UP and'
+                      ' DOWN arrows.')
+                print('Use TAB to auto-complete keywords. Press TAB twice'
+                      ' on an empty line to list all the available keywords.')
+                print('You can check the online documentation at'
+                      ' http://coal-lang.github.io/coal.')
                 continue
             elif code == 'copyright':
                 print('Copyright (c) 2016 William F.')
                 print('All rights reserved.')
                 continue
             elif code == 'credits':
-                print('Thanks to @dgelessus and everyone in the Pythonista community'
-                    ' for supporting Coal development. See coal-lang.github.io/coal'
-                    ' for more information.')
+                print('Thanks to @dgelessus and everyone in the Pythonista'
+                      'community for supporting Coal development. See'
+                      ' coal-lang.github.io/coal for more information.')
                 continue
             elif code == 'license':
                 print('Type [license] to see the full license text.')
@@ -819,7 +836,7 @@ if len(sys.argv) < 2:
 
             # Check if we're entering a complex block
             elif any(code.lstrip().startswith(n) for n in ['def', 'if', 'for',
-                                                        'each']):
+                                                           'each']):
                 depth = 4
 
                 while True:
@@ -837,20 +854,17 @@ if len(sys.argv) < 2:
                     if line.lstrip() == '':
                         continue
 
-                    # Do we need more indentation?
+                    # Handle multiple blocks
                     elif any(line.lstrip().startswith(n) for n in ['def',
-                                                                'if',
-                                                                'for',
-                                                                'each']):
+                                                                   'if',
+                                                                   'for',
+                                                                   'each']):
                         depth += 4
                     elif any(line.lstrip().startswith(n) for n in ['elif',
-                                                                'else']):
-                        depth = depth
+                                                                   'else']):
+                        pass
                     else:
                         depth = len(line) - len(line.lstrip())
-
-                    # Convert tabs to spaces
-                    line = line.replace('\t', '    ')
 
                     # Restore newline
                     line += '\n'

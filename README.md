@@ -7,7 +7,7 @@ Although some of its aspects resemble Objective-C, Coal is *not* a C-derived lan
 
 ## Documentation
 
-You can read the online documentation at [this link](http://10c8.github.io/coal).
+You can read the online documentation at [this link](http://coal-lang.github.io/coal).
 
 Another source of documentation is the standard library, located at `stdlib.py`. Everything in Coal is an object, so most of the language is implemented there.
 
