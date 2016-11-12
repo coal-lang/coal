@@ -1,7 +1,7 @@
 #: vim set encoding=utf-8 :
 ##
- # Stove
- # Coal interpreter prototype
+ # Coal
+ # Python implementation of the Coal language
  #
  # Module: Abstract syntax-tree
  # version 0.21
@@ -10,7 +10,7 @@
 import sys
 # import copy
 
-from CoalObject import *
+from stdlib import *
 
 Builtins = CoalBuiltin()
 

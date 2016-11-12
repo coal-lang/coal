@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #: vim set encoding=utf-8 :
 ##
- # Stove
- # Coal interpreter prototype
+ # Coal
+ # Python implementation of the Coal language
  #
  # author William "10c8" F.
  # version 0.33
@@ -11,13 +11,13 @@
 
 # Imports
 import sys
+import re
 import collections
 import ply.yacc as yacc
 
 import lexer
-import CoalAST
 
-from CoalAST import *
+from ast import *
 
 # Options
 DEBUGGING = False
@@ -780,9 +780,16 @@ def p_error(p):
 
 # TESTING!
 # Build the parser
-test_file = open('test.coal')
-code = test_file.readlines()
-src = '\n'.join(code)
+if len(sys.argv) < 2:
+    print('The REPL isn\'t ready yet. :(')
+    print('Please specify a file to run.')
+    print('Example: coal myprogram.coal')
+
+    sys.exit()
+
+test_file = open(sys.argv[1], 'r', encoding='utf-8')
+src = test_file.read()
+test_file.close()
 
 # lexer = lexer.IndentLexer()
 lexer = lexer.lexer

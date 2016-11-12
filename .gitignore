@@ -1,6 +1,8 @@
 # Other files
+parsetab.py
 pyparser.py
 parser.out
+*!.coal
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
