@@ -4,10 +4,12 @@
  # Coal interpreter prototype
  #
  # Module: Abstract syntax-tree
- # version 0.2
+ # version 0.21
 ##
 
 import sys
+# import copy
+
 from CoalObject import *
 
 Builtins = CoalBuiltin()
@@ -28,6 +30,14 @@ local_scope.append({
 
 class Globals(object):
     scope_depth = 0
+
+    self_ = None
+
+    scope = None
+
+    flow = False
+    flow_next = False
+    flow_break = False
 
 g = Globals()
 
@@ -52,7 +62,7 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         for i in range(len(selector_args)):
             selector_args[i] = ExecuteCoal(selector_args[i], scope)
 
-        if selectors in Builtins.methods:
+        if selectors in Builtins.public:
             return Builtins.call(selectors, selector_args)
         elif selectors in scope['methods']:
             if g.scope_depth == 0:
@@ -82,6 +92,8 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
 
                     g.scope_depth -= 1
                     return result
+
+            g.scope_depth -= 1
     elif isinstance(stmt, ObjectMethodCall):
         obj = ExecuteCoal(stmt.object, scope)
         selectors = stmt.selectors
@@ -91,15 +103,74 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             selector_args[i] = ExecuteCoal(selector_args[i], scope)
 
         return obj.call(selectors, selector_args)
+    elif isinstance(stmt, TypeCall):
+        _type = stmt.type
+        selectors = stmt.selectors
+        selector_args = []
+
+        if stmt.selector_args is not None:
+            selector_args = list(stmt.selector_args)
+
+            for i in range(len(selector_args)):
+                selector_args[i] = ExecuteCoal(selector_args[i], scope)
+
+        n_scope = {
+            'types': dict(Builtins.types),
+            'methods': {},
+            'names': dict(Builtins.names)
+        }
+
+        # TODO: Currently, an empty instance of "_type_{...}" is created to
+        # call an internal CoalTypeInit and do the "add arguments to scope"
+        # thing, then the "real" new CoalObject instance is created and the
+        # suite is called. Perhaps that's not the right way to do it, as it
+        # creates an extra, unneeded(?), object. I think I should change
+        # the structure of user-created types (and instances).
+
+        defs = scope['types'][_type](selectors, n_scope, selector_args)
+        suite, nscope = defs
+
+        if _type in scope['types']:
+            new_obj = scope['types'][_type]
+
+            for st in suite:
+                g.self_ = new_obj
+
+                if isinstance(st, SelfAssign):
+                    new_obj.attributes[st.name] = ExecuteCoal(st.value, nscope)
+                else:
+                    ExecuteCoal(st, scope)
+
+            g.self_ = None
+            return new_obj
+
+    elif isinstance(stmt, NameFromSelf):
+        if g.self_ is None:
+            throwError(0, 0, 'Call to "self" from outside a type constructor.')
+
+        if stmt.name not in g.self_.public:
+            throwError(0, 0,
+                       'NameError: Unknown name "{}"'
+                       .format(stmt.name))
+
+        return g.self_.public[stmt.name]
 
     # Name
     elif isinstance(stmt, NameDef):
         value = ExecuteCoal(stmt.value, scope)
-        local_types = scope['types']
+        builtin_types = Builtins.types
 
-        if stmt.type in local_types:
+        if stmt.type in builtin_types:
             scope['names'][stmt.name] =\
-                local_types[stmt.type]['init'](value.value, value.object_type)
+                builtin_types[stmt.type]['init'](value.value,
+                                                 value.object_type)
+        elif stmt.type in scope['types']:
+            if value.object_type != stmt.type:
+                throwError(0, 0, 'TypeError: Unknown value type for "{}": {}'
+                           .format(stmt.type, value.object_type))
+
+            scope['names'][stmt.name] = value
+
     elif isinstance(stmt, NameDefEmpty):
         if stmt.type in scope['types']\
            or stmt.type == 'Any':
@@ -150,10 +221,58 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         name = scope['names'][stmt.name]
 
         if not isinstance(name, CoalIterableObject):
-            throwError(0, 0, 'Exception: "{}" object is not a writable iterable'
-                       .format(name.object_type))
+            throwError(0, 0, 'Exception: "{}" object is not a writable'
+                       ' iterable'.format(name.object_type))
 
         name.assign(index, value)
+
+    # Type
+
+    # TODO: Lists are fun!
+    # [ ] Implement private properties.
+    # [ ] Implement protected properties.
+
+    elif isinstance(stmt, TypeDef):
+        inits = {}
+        public = {}
+        protected = {}
+        private = {}
+
+        for st in stmt.suite:
+            if isinstance(st, TypeInitDef):
+                inits[st.selectors] = CoalTypeInit(
+                    st.selectors,
+                    st.selector_names,
+                    st.selector_types,
+                    st.selector_aliases,
+                    st.suite
+                )
+            # elif isinstance(st, TypePublicDecl):
+            #     for pst in st.suite:
+            #         if isinstance(pst, NameDef):
+            #             public[stmt.name] = ExecuteCoal(stmt.value, scope)
+            #         elif isinstance(pst, FuncDef):
+            #             public[stmt.selectors] = CoalFunction(
+            #                 stmt.selectors,
+            #                 stmt.selector_names,
+            #                 stmt.selector_types,
+            #                 stmt.selector_aliases,
+            #                 stmt.return_type,
+            #                 stmt.suite,
+            #                 stmt.simple
+            #             )
+            #         else:
+            #             throwError(0, 0, 'Exception: What are you trying to'
+            #                        ' do inside a type definition besides...'
+            #                        ' A type definition?')
+
+        scope['types'][stmt.name] = CoalType(
+            stmt.name,
+            inits,
+            public,
+            protected,
+            private
+        )
 
     # Function
     elif isinstance(stmt, FuncDef):
@@ -195,6 +314,8 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
 
     # Loop
     elif isinstance(stmt, ForBlock):
+        g.flow = True
+
         start = ExecuteCoal(stmt.start, scope)
         end = ExecuteCoal(stmt.end, scope)
 
@@ -205,7 +326,7 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
 
         if not isinstance(start, CoalInt)\
            or not isinstance(end, CoalInt)\
-           or (stmt.interval is not None\
+           or (stmt.interval is not None
                and not isinstance(interval, CoalInt)):
             throwError(0, 0, 'TypeError: The values for "start", '
                              '"end" and "interval" must be "Int".')
@@ -224,43 +345,84 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                 scope['names'][stmt.name].value = i.value
 
                 for st in stmt.suite:
+                    if g.flow_next:
+                        g.flow_next = False
+                        break
+                    elif g.flow_break:
+                        g.flow_break = False
+                        return
+
                     ExecuteCoal(st, scope)
 
                 i.value += interval.value
 
             del scope['names'][stmt.name]
+
+        g.flow = False
     elif isinstance(stmt, EachBlock):
+        g.flow = True
+
         iterable = ExecuteCoal(stmt.iterable, scope)
 
         if not isinstance(iterable, CoalIterableObject):
             throwError('TypeError: "{}" object is not iterable.'
-                       .format(arg.object_type))
+                       .format(iterable.object_type))
 
         if stmt.name in scope['names']:
             var_type = scope['names'][stmt.name].object_type
         else:
             scope['names'][stmt.name] = CoalVoid(obj_type='Any')
 
-            length = iterable.call('length_', []).value
+            length = iterable.call('length:', []).value
             i = CoalInt(0)
 
             while i.value < length:
                 scope['names'][stmt.name] = iterable.iter(i)
 
                 for st in stmt.suite:
+                    if g.flow_next:
+                        g.flow_next = False
+                        break
+                    elif g.flow_break:
+                        g.flow_break = False
+                        return
+
                     ExecuteCoal(st, scope)
 
                 i.value += 1
 
             del scope['names'][stmt.name]
+
+        g.flow = False
     elif isinstance(stmt, WhileBlock):
+        g.flow = True
+
         test = ExecuteCoal(stmt.test, scope)
 
         while test.value:
             for st in stmt.suite:
+                if g.flow_next:
+                    g.flow_next = False
+                    break
+                elif g.flow_break:
+                    g.flow_break = False
+                    return
+
                 ExecuteCoal(st, scope)
 
             test = ExecuteCoal(stmt.test, scope)
+
+        g.flow = False
+    elif isinstance(stmt, FlowBreak):
+        if not g.flow:
+            throwError('SyntaxError: Invalid syntax: "break".')
+
+        g.flow_break = True
+    elif isinstance(stmt, FlowNext):
+        if not g.flow:
+            throwError('SyntaxError: Invalid syntax: "next".')
+
+        g.flow_next = True
 
     # Expression
     elif type(stmt).__name__ in ['ExprAddition',
@@ -274,13 +436,16 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                                  'ExprBitShiftR',
                                  'ExprBitShiftL',
                                  'ExprEqual',
+                                 'ExprNotEqual',
                                  'ExprGreater',
-                                 'ExprLess']:
+                                 'ExprLess',
+                                 'ExprEqualGreater',
+                                 'ExprEqualLess']:
         a = ExecuteCoal(stmt.a, scope)
         b = ExecuteCoal(stmt.b, scope)
 
-        a_type = a.object_type
-        b_type = b.object_type
+        # a_type = a.object_type
+        # b_type = b.object_type
 
         # if all(a_type != t for t in ('Int', 'Float'))\
         #    or all(b_type != t for t in ('Int', 'Float')):
@@ -311,10 +476,16 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             result = a.value << b.value
         elif expr_type == 'ExprEqual':
             result = 'true' if a.value == b.value else 'false'
+        elif expr_type == 'ExprNotEqual':
+            result = 'false' if a.value == b.value else 'true'
         elif expr_type == 'ExprGreater':
             result = 'true' if a.value > b.value else 'false'
         elif expr_type == 'ExprLess':
             result = 'true' if a.value < b.value else 'false'
+        elif expr_type == 'ExprEqualGreater':
+            result = 'true' if a.value >= b.value else 'false'
+        elif expr_type == 'ExprEqualLess':
+            result = 'true' if a.value <= b.value else 'false'
 
         if type(result) == int:
             return CoalInt(result)
@@ -406,6 +577,16 @@ class ObjectPropertyCall(CoalAST):
         self.property = _property
 
 
+class TypeCall(CoalAST):
+    def __init__(self,
+                 _type,
+                 selectors=None,
+                 selector_args=None):
+        self.type = _type
+        self.selectors = selectors
+        self.selector_args = selector_args
+
+
 # Name
 class NameDef(CoalAST):
     def __init__(self,
@@ -463,7 +644,7 @@ class FuncDef(CoalAST):
         self.simple = simple
 
         for selector in selector_names:
-            self.selectors += '{}_'.format(selector)
+            self.selectors += '{}:'.format(selector)
 
 
 class FuncRet(CoalAST):
@@ -476,19 +657,51 @@ class FuncRet(CoalAST):
 class TypeDef(CoalAST):
     def __init__(self,
                  name,
+                 extends,
                  suite):
         self.name = name
+        self.extends = extends
         self.suite = suite
 
 
-class TypeDefExt(CoalAST):
+class TypeInitDef(CoalAST):
+    def __init__(self,
+                 selector_names,
+                 selector_types,
+                 selector_aliases,
+                 suite):
+        self.selectors = ''
+        self.selector_names = selector_names
+        self.selector_types = selector_types
+        self.selector_aliases = selector_aliases
+        self.suite = suite
+
+        for selector in selector_names:
+            self.selectors += '{}:'.format(selector)
+
+
+class SelfAssign(CoalAST):
     def __init__(self,
                  name,
-                 ext_name,
-                 suite):
+                 value):
         self.name = name
-        self.ext_name = ext_name
-        self.suite = suite
+        self.value = value
+
+
+class NameFromSelf(CoalAST):
+    def __init__(self,
+                 name):
+        self.name = name
+
+
+class SelfRet(CoalAST):
+    pass
+
+
+class NameAsSelector(CoalAST):
+    def __init__(self,
+                 name):
+        self.name = name
 
 
 # Conditional
@@ -535,6 +748,14 @@ class WhileBlock(CoalAST):
                  suite):
         self.test = test
         self.suite = suite
+
+
+class FlowBreak(CoalAST):
+    pass
+
+
+class FlowNext(CoalAST):
+    pass
 
 
 # Expression
@@ -610,7 +831,7 @@ class ExprGreater(CoalAST):
         self.b = b
 
 
-class ExprGreaterEqual(CoalAST):
+class ExprEqualGreater(CoalAST):
     def __init__(self,
                  a,
                  b):
@@ -626,7 +847,7 @@ class ExprLess(CoalAST):
         self.b = b
 
 
-class ExprLessEqual(CoalAST):
+class ExprEqualLess(CoalAST):
     def __init__(self,
                  a,
                  b):

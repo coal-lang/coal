@@ -4,7 +4,7 @@
  # Coal interpreter prototype
  #
  # Module: Lexer
- # version 0.3
+ # version 0.31
 ##
 
 # Imports
@@ -26,7 +26,7 @@ reserved = {
     'return': 'FUNC_RET',
 
     # Classes
-    'class': 'CLASS',
+    'type': 'CLASS',
     'extends': 'EXTENDS',
     'init': 'INIT',
     'private': 'PRIVATE',
@@ -37,6 +37,8 @@ reserved = {
     'for': 'FOR',
     'each': 'EACH',
     'while': 'WHILE',
+    'break': 'BREAK',
+    'next': 'NEXT',
 
     # Conditionals
     'elif': 'ELIF',
@@ -54,10 +56,10 @@ reserved = {
 # Tokens
 tokens = (
     'WITH', 'AS', 'ASK', 'NEWLINE',
-    'SPACE', 'COMMA', 'EQUALS', 'BAR', 'NOT_EQUAL', 'PERCENT',
+    'SPACE', 'COMMA', 'EQUALS', 'BAR', 'PERCENT', 'AMPERSAND',
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
     'AND', 'OR', 'XOR', 'RSHIFT', 'LSHIFT', 'NOT',
-    'EQEQUAL', 'GREATER', 'LESS',
+    'EQEQUAL', 'NOT_EQUAL', 'GREATER', 'LESS', 'EQGREATER', 'EQLESS',
     'PLUSEQ', 'MINUSEQ', 'TIMESEQ', 'DIVEQ',
     'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LSQB', 'RSQB',
     'TYPE_NAME',
@@ -83,6 +85,8 @@ t_LETTER_NAME = r'[a-z_]'
 t_EQEQUAL = r'\=\='
 t_GREATER = r'\>'
 t_LESS = r'\<'
+t_EQGREATER = r'\>\='
+t_EQLESS = r'\<\='
 
 # Simple tokens
 t_WITH = r':'
@@ -93,6 +97,7 @@ t_EQUALS = r'\='
 t_BAR = r'\|'
 t_NOT_EQUAL = r'\!\='
 t_PERCENT = r'\%'
+t_AMPERSAND = r'\&'
 t_LBRACE = r'\{'
 t_RBRACE = r'\}'
 t_TYPE_NAME = r'\b[A-Z][a-zA-Z]+'
@@ -112,6 +117,7 @@ t_XOR = r'\^'
 t_RSHIFT = r'\>\>'
 t_LSHIFT = r'\<\<'
 t_NOT = r'\~'
+
 
 def t_LPAREN(t):
     r'\('
@@ -159,7 +165,7 @@ def t_INT(t):
 
 
 # Read in a string
-def t_STRING(t):
+def t_STRING(t):  # HACK
     # r'([\'"]).+?\1'
     # r'\"([^\\"]|(\\.))*\"'
     r'"([^\\"]+|\\"|\\n|\\\\)*"'
@@ -372,7 +378,8 @@ def indentation_filter(tokens):
                 # At the same level
                 pass
             elif depth > levels[-1]:
-                raise IndentationError("indentation increase but not in new block")
+                raise IndentationError("indentation increase but not in new"
+                                       " block")
             else:
                 # Back up; but only if it matches a previous level
                 try:
