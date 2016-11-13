@@ -13,8 +13,8 @@ import ply.lex as lex
 # Reserved names
 reserved = {
     # Imports
-    'import': 'IMP_CALL',
-    'from': 'IMP_FROM',
+    'import': 'IMPORT',
+    'from': 'FROM',
 
     # Variables and functions
     'let': 'VAR_DEF',

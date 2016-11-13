@@ -66,7 +66,12 @@ class CoalObject(object):
 
     def call(self, selectors, args):
         if selectors in self.public:
-            return self.methods[selectors](*args)
+            result = self.methods[selectors](*args)
+
+            if result is None:
+                return CoalVoid()
+            else:
+                return result
         elif selectors[:-1] in self.public:
             if len(args) == 0:
                 return self.attributes[selectors[:-1]]
@@ -85,6 +90,19 @@ class CoalObject(object):
 
 
 # Sub-types
+class CoalModule(CoalObject):
+    def __init__(self, name, methods):
+        CoalObject.__init__(self, name, None, None)
+
+        for method in methods.keys():
+            self.public.append(method)
+
+        self.methods.update(methods)
+
+        self.repr_as['String'] = lambda: CoalString('Module({})'
+                                                    .format(self.object_type))
+
+
 class CoalIterableObject(CoalObject):
     def __init__(self, *args):
         CoalObject.__init__(self, *args)
@@ -127,7 +145,8 @@ class CoalVoid(CoalObject):
     def __init__(self, of_type=None, obj_type=None):
         if of_type is None:
             if obj_type is not None:
-                super(self.__class__, self).__init__('{}?'.format(obj_type),
+                super(self.__class__, self).__init__('Void({})'
+                                                     .format(obj_type),
                                                      'void',
                                                      obj_type)
             else:
@@ -138,7 +157,7 @@ class CoalVoid(CoalObject):
                                                  of_type.object_type)
 
         self.repr_as = {
-            'String': lambda: CoalString('{}?'.format(self.value))
+            'String': lambda: CoalString('Void({})'.format(self.value))
         }
 
 
@@ -415,32 +434,42 @@ class CoalList(CoalIterableObject):
 
 # Builtins!
 class CoalBuiltin(CoalObject):
-    types = {
-        'Void': {
-            'init': CoalVoid
-        },
-        'Bool': {
-            'init': CoalBool
-        },
-        'Int': {
-            'init': CoalInt
-        },
-        'Float': {
-            'init': CoalFloat
-        },
-        'String': {
-            'init': CoalString
-        },
-        'List': {
-            'init': CoalList
-        }
-    }
-
-    names = {}
-
     def __init__(self):
         super(self.__class__, self).__init__('Builtins', None, None)
 
+        # Standard Library
+        from lib.math import _stdlib_math
+
+        self.modules = {
+            'math': _stdlib_math
+        }
+
+        # Built-in types
+        self.types = {
+            'Void': {
+                'init': CoalVoid
+            },
+            'Bool': {
+                'init': CoalBool
+            },
+            'Int': {
+                'init': CoalInt
+            },
+            'Float': {
+                'init': CoalFloat
+            },
+            'String': {
+                'init': CoalString
+            },
+            'List': {
+                'init': CoalList
+            }
+        }
+
+        # Built-in names
+        self.names = {}
+
+        # Built-in methods
         # self.public = list(self.public) + [
         self.public += [
             'license:',

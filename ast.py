@@ -54,8 +54,24 @@ def throwError(p, pos, message):
 
 # Parse a statement
 def ExecuteCoal(stmt, scope=local_scope[current_scope]):
+    # Import
+    # TODO: Import user-created modules
+    if isinstance(stmt, Import):
+        name = ExecuteCoal(stmt.name, scope).value
+
+        if stmt.alias is not None:
+            alias = stmt.alias
+        else:
+            alias = name
+
+        if name in Builtins.modules:
+            scope['names'][alias] = Builtins.modules[name]()
+        else:
+            throwError(0, 0, 'ImportError: Can\'t find module "{}"'
+                       .format(name))
+
     # Call
-    if isinstance(stmt, LocalMethodCall):
+    elif isinstance(stmt, LocalMethodCall):
         selectors = stmt.selectors
         selector_args = list(stmt.selector_args)
 
@@ -68,7 +84,7 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             if g.scope_depth == 0:
                 n_scope = {
                     'types': dict(Builtins.types),
-                    'methods': {},
+                    'methods': dict(scope['methods']),
                     'names': dict(Builtins.names)
                 }
             else:
@@ -745,6 +761,15 @@ class FlowBreak(CoalAST):
 
 class FlowNext(CoalAST):
     pass
+
+
+# Import
+class Import(CoalAST):
+    def __init__(self,
+                 name,
+                 alias=None):
+        self.name = name
+        self.alias = alias
 
 
 # Expression

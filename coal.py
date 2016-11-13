@@ -118,6 +118,7 @@ def p_stmt(p):
          | break
          | next
          | conditional
+         | import
     '''
     p[0] = p[1]
 
@@ -596,6 +597,19 @@ def p_else_block(p):
     p[0] = p[2]
 
 
+# Import
+def p_import(p):
+    '''
+    import : IMPORT STRING AS name
+           | IMPORT STRING
+    '''
+
+    if len(p) == 3:
+        p[0] = Import(String(p[2]))
+    else:
+        p[0] = Import(String(p[2]), p[4])
+
+
 # Value
 precedence = (
     ('left', 'PLUS', 'MINUS'),
@@ -838,35 +852,12 @@ if len(sys.argv) < 2:
             # Check if we're entering a complex block
             elif any(code.lstrip().startswith(n) for n in ['def', 'if', 'for',
                                                            'each', 'while']):
-                depth = 4
-
                 while True:
-                    # Automatic indentation (fancy!)
-                    readline.set_startup_hook(
-                        lambda: readline.insert_text(' ' * depth)
-                    )
-
-                    try:
-                        line = input('... ')
-                    finally:
-                        readline.set_startup_hook()
+                    line = input('... ')
 
                     # Skip empty lines
                     if line.lstrip() == '':
                         continue
-
-                    # Handle multiple blocks
-                    elif any(line.lstrip().startswith(n) for n in ['def',
-                                                                   'if',
-                                                                   'for',
-                                                                   'each',
-                                                                   'while']):
-                        depth += 4
-                    elif any(line.lstrip().startswith(n) for n in ['elif',
-                                                                   'else']):
-                        pass
-                    else:
-                        depth = len(line) - len(line.lstrip())
 
                     # Restore newline
                     line += '\n'
@@ -874,12 +865,9 @@ if len(sys.argv) < 2:
                     # Insert the line on the block
                     code += line
 
-                    if line.lstrip().startswith('end'):
-                        if depth == 0:
-                            parser.parse(code)
-                            break
-                        else:
-                            depth -= 4
+                    if line == 'end\n':
+                        parser.parse(code)
+                        break
             else:
                 parser.parse(code)
 
