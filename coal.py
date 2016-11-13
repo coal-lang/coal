@@ -12,6 +12,7 @@
 # Imports
 import sys
 import re
+import os
 import collections
 import ply.yacc as yacc
 
@@ -792,7 +793,7 @@ if len(sys.argv) < 2:
     # And tab completion
     keywords = ['let', 'def', 'if', 'elif', 'else', 'for', 'each', 'while',
                 'break', 'next', 'return', 'type', 'end', 'help', 'copyright',
-                'credits', 'license', 'quit']
+                'credits', 'license', 'clear', 'quit']
 
     def completer(text, state):
         options = [i for i in keywords if i.startswith(text)]
@@ -844,6 +845,9 @@ if len(sys.argv) < 2:
                 continue
             elif code == 'license':
                 print('Type [license] to see the full license text.')
+                continue
+            elif code == 'clear':
+                os.system('cls' if os.name=='nt' else 'clear')
                 continue
             elif code == 'quit':
                 print('Use [quit] or Ctrl-D (i.e. EOF) to exit.')
