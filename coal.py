@@ -753,7 +753,6 @@ if len(sys.argv) < 2:
     try:
         # We'll use readline to enable command history and tab completion
         import readline
-
         readline.parse_and_bind('set editing-mode vi')
 
         keywords = ['let', 'def', 'if', 'elif', 'else', 'for', 'each', 'while',
