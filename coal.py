@@ -5,22 +5,28 @@
  # Python implementation of the Coal language
  #
  # author William F. de Araújo
- # version 0.34
+ # version 0.35
  # copyright MIT
 ##
 
 # Imports
+import os
 import sys
-import re
-import collections
 import ply.yacc as yacc
 
 import lexer
-
 from ast import *
 
 # Options
 DEBUGGING = False
+
+# Python 2 or 3?
+py_three = sys.version_info.major == 3
+
+if py_three:
+    from three import flatten
+else:
+    from two import flatten
 
 
 # Utils
@@ -37,47 +43,6 @@ def throwError(p, pos, message):
         print('[{}:{}] {}.'.format(p.lineno, p.lexpos, message))
 
     sys.exit(1)
-
-
-def createObject(obj_type, obj_value, obj_value_type):
-    '''
-    Create a new Object from a custom (or built-in) type
-    '''
-
-    local_types = lexer.local_scope[lexer.current_scope]['types']
-
-    if obj_type in local_types:
-        return local_types[obj_type]['init'](obj_value, obj_value_type)
-
-
-def flatten(l):
-    '''
-    Flatten a x-dimensional list into a 1D list
-    '''
-
-    def dims(testlist, dim=0):
-        if isinstance(testlist, list):
-            if testlist == []:
-                return dim
-            dim = dim + 1
-            dim = dims(testlist[0], dim)
-            return dim
-        else:
-            if dim == 0:
-                return -1
-            else:
-                return dim
-
-    if dims(l) < 2:
-        pass
-
-    for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes))\
-           and not isinstance(el, CoalAST) and not isinstance(el, tuple):
-            yield from flatten(el)
-        else:
-            yield el
-
 
 # YACC parsing code down there
 # Import the tokens from Lex to use with YACC
@@ -785,24 +750,27 @@ def p_error(p):
 
 # HACK: A simple REPL
 if len(sys.argv) < 2:
-    # We'll use readline to enable command history
-    import readline
-    readline.parse_and_bind('set editing-mode vi')
+    try:
+        # We'll use readline to enable command history and tab completion
+        import readline
 
-    # And tab completion
-    keywords = ['let', 'def', 'if', 'elif', 'else', 'for', 'each', 'while',
-                'break', 'next', 'return', 'type', 'end', 'help', 'copyright',
-                'credits', 'license', 'quit']
+        readline.parse_and_bind('set editing-mode vi')
 
-    def completer(text, state):
-        options = [i for i in keywords if i.startswith(text)]
-        if state < len(options):
-            return options[state]
-        else:
-            return None
+        keywords = ['let', 'def', 'if', 'elif', 'else', 'for', 'each', 'while',
+                    'break', 'next', 'return', 'type', 'end', 'help', 'copyright',
+                    'credits', 'license', 'clear', 'quit']
 
-    readline.parse_and_bind("tab: complete")
-    readline.set_completer(completer)
+        def completer(text, state):
+            options = [i for i in keywords if i.startswith(text)]
+            if state < len(options):
+                return options[state]
+            else:
+                return None
+
+        readline.parse_and_bind("tab: complete")
+        readline.set_completer(completer)
+    except ImportError:
+        pass
 
     # Build our parser
     lexer = lexer.lexer
@@ -810,21 +778,37 @@ if len(sys.argv) < 2:
 
     parser = yacc.yacc(optimize=True)
 
+    # REPL locals
+    rlocals = {
+        'result': CoalVoid()
+    }
+
+    show_result = [LocalMethodCall, ObjectMethodCall, NameDef, NameAssign,
+                   IterableItemAssign]
+
+    if py_three:
+        _input = input
+    else:
+        _input = raw_input
+
     # Greet the user, of course.
-    print('Coal 0.34 (nightly, Nov 12 2016)')
+    py_version = sys.version.split('\n')[0][:-1]
+
+    print('Coal 0.35 (nightly, Nov 13 2016)')
+    print('[Python {}] on {}'.format(py_version, sys.platform))
     print('Type "help", "copyright", "credits" or "license" for more'
           ' information.')
 
     # REPL
     while True:
         try:
-            code = input('>>> ')
+            code = _input('>>> ')
 
             # Skip empty lines
             if code == '':
                 continue
 
-            # Keywords
+            # Special keywords
             elif code == 'help':
                 print('You can access the command history with the UP and'
                       ' DOWN arrows.')
@@ -834,16 +818,19 @@ if len(sys.argv) < 2:
                       ' http://coal-lang.github.io/coal.')
                 continue
             elif code == 'copyright':
-                print('Copyright (c) 2016 William F.')
+                print('Copyright (c) 2016 William F. de Araújo')
                 print('All rights reserved.')
                 continue
             elif code == 'credits':
                 print('Thanks to @dgelessus and everyone in the Pythonista'
-                      'community for supporting Coal development. See'
+                      ' community for supporting Coal development. See'
                       ' coal-lang.github.io/coal for more information.')
                 continue
             elif code == 'license':
                 print('Type [license] to see the full license text.')
+                continue
+            elif code == 'clear':
+                os.system('cls' if os.name == 'nt' else 'clear')
                 continue
             elif code == 'quit':
                 print('Use [quit] or Ctrl-D (i.e. EOF) to exit.')
@@ -853,7 +840,7 @@ if len(sys.argv) < 2:
             elif any(code.lstrip().startswith(n) for n in ['def', 'if', 'for',
                                                            'each', 'while']):
                 while True:
-                    line = input('... ')
+                    line = _input('... ')
 
                     # Skip empty lines
                     if line.lstrip() == '':
@@ -866,23 +853,28 @@ if len(sys.argv) < 2:
                     code += line
 
                     if line == 'end\n':
-                        parser.parse(code)
                         break
-            else:
-                parser.parse(code)
+
+            parser.parse(code)
 
             # Execute the block
             for stmt in lexer.ast:
-                ExecuteCoal(stmt)
+                ExecuteCoal(stmt, repl_locals=rlocals)
+
+                if any(isinstance(stmt, n) for n in show_result)\
+                   and not isinstance(rlocals['result'], CoalVoid):
+                    print('<<< ' + str(rlocals['result'].repr('String').value))
+                    rlocals['result'] = CoalVoid()
         except KeyboardInterrupt:
             print('KeyboardInterrupt')
             continue
         except EOFError:
             # Exit on CTRL-D
+            sys.stdout.write('\n')
             sys.exit()
 
 # Build the parser
-test_file = open(sys.argv[1], 'r', encoding='utf-8')
+test_file = open(sys.argv[1], 'r')
 src = test_file.read()
 test_file.close()
 

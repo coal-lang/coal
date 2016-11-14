@@ -8,6 +8,7 @@
 ##
 
 # Imports
+import sys
 import ply.lex as lex
 
 # Reserved names
@@ -165,7 +166,11 @@ def t_INT(t):
 def t_STRING(t):
     r'\"([^\\\n]|(\\.))*?\"'
 
-    t.value = bytes(t.value[1:-1], 'latin-1').decode('unicode_escape')
+    if sys.version_info.major == 3:
+        t.value = bytes(t.value[1:-1], 'latin-1').decode('unicode_escape')
+    else:
+        t.value = t.value[1:-1].decode('string_escape')
+
     return t
 
 

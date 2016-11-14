@@ -33,7 +33,7 @@ class Globals(object):
 
     self_ = None
 
-    scope = None
+    scope = {}
 
     flow = False
     flow_next = False
@@ -53,9 +53,15 @@ def throwError(p, pos, message):
 
 
 # Parse a statement
-def ExecuteCoal(stmt, scope=local_scope[current_scope]):
+def ExecuteCoal(stmt, scope=local_scope[current_scope],
+                repl_locals=None):
     # Import
-    # TODO: Import user-created modules
+
+    # TODO:
+    # [ ] Import user-created modules.
+    # [ ] Make program-level (is that the correct term?) imports global.
+    # [ ] Allow importing only parts of a module.
+
     if isinstance(stmt, Import):
         name = ExecuteCoal(stmt.name, scope).value
 
@@ -79,7 +85,12 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             selector_args[i] = ExecuteCoal(selector_args[i], scope)
 
         if selectors in Builtins.public:
-            return Builtins.call(selectors, selector_args)
+            result = Builtins.call(selectors, selector_args)
+
+            if repl_locals is not None:
+                repl_locals['result'] = result
+
+            return result
         elif selectors in scope['methods']:
             if g.scope_depth == 0:
                 n_scope = {
@@ -103,12 +114,18 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                     if result.object_type != rtype:
                         throwError(0, 0,
                                    'TypeError: Invalid return type for "{}": '
-                                   '"{}"'
-                                   .format(rtype, result.object_type))
+                                   '"{}"'.format(rtype, result.object_type))
+
+                    if repl_locals is not None:
+                        repl_locals['result'] = result
 
                     g.scope_depth -= 1
                     return result
 
+            if repl_locals is not None:
+                repl_locals['result'] = result
+
+            return CoalVoid()
             g.scope_depth -= 1
     elif isinstance(stmt, ObjectMethodCall):
         obj = ExecuteCoal(stmt.object, scope)
@@ -118,7 +135,12 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         for i in range(len(selector_args)):
             selector_args[i] = ExecuteCoal(selector_args[i], scope)
 
-        return obj.call(selectors, selector_args)
+        result = obj.call(selectors, selector_args)
+
+        if repl_locals is not None:
+            repl_locals['result'] = result
+
+        return result
     elif isinstance(stmt, TypeCall):
         _type = stmt.type
         selectors = stmt.selectors
@@ -187,12 +209,18 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
 
             scope['names'][stmt.name] = value
 
+        if repl_locals is not None:
+            repl_locals['result'] = scope['names'][stmt.name]
+
     elif isinstance(stmt, NameDefEmpty):
         if stmt.type in scope['types']\
            or stmt.type == 'Any':
             scope['names'][stmt.name] = CoalVoid(obj_type=stmt.type)
         else:
             throwError(0, 4, 'TypeError: Unknown type "{}"'.format(stmt.type))
+
+        if repl_locals is not None:
+            repl_locals['result'] = scope['names'][stmt.name]
 
     # Assignment
     elif isinstance(stmt, NameAssign):
@@ -225,6 +253,9 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             scope['names'][stmt.name].value *= value.value
         elif stmt.mode == '/=':
             scope['names'][stmt.name].value /= value.value
+
+        if repl_locals is not None:
+            repl_locals['result'] = scope['names'][stmt.name]
     elif isinstance(stmt, IterableItemAssign):
         index = ExecuteCoal(stmt.index, scope)
         value = ExecuteCoal(stmt.value, scope)
@@ -241,6 +272,9 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
                        ' iterable'.format(name.object_type))
 
         name.assign(index, value)
+
+        if repl_locals is not None:
+            repl_locals['result'] = name
 
     # Type
 
@@ -334,6 +368,7 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
 
         start = ExecuteCoal(stmt.start, scope)
         end = ExecuteCoal(stmt.end, scope)
+        name = stmt.name
 
         if stmt.interval is not None:
             interval = ExecuteCoal(stmt.interval, scope)
@@ -343,22 +378,22 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         if not isinstance(start, CoalInt)\
            or not isinstance(end, CoalInt)\
            or (stmt.interval is not None
-               and not isinstance(interval, CoalInt)):
+               and not isinstance(stmt.interval, CoalInt)):
             throwError(0, 0, 'TypeError: The values for "start", '
                              '"end" and "interval" must be "Int".')
 
-        if stmt.name in scope['names']:
-            var_type = scope['names'][stmt.name].object_type
+        if name in scope['names']:
+            var_type = scope['names'][name].object_type
 
             if var_type != 'Void(Any)' and var_type != 'Int':
                 throwError(0, 3, 'TypeError: Wrong value type for {}: Int'
                                  .format(var_type))
         else:
             i = CoalInt(start.value)
-            scope['names'][stmt.name] = i
+            scope['names'][name] = i
 
             while i.value <= end.value:
-                scope['names'][stmt.name].value = i.value
+                scope['names'][name].value = i.value
 
                 for st in stmt.suite:
                     if g.flow_next:
@@ -372,7 +407,7 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
 
                 i.value += interval.value
 
-            del scope['names'][stmt.name]
+            del scope['names'][name]
 
         g.flow = False
     elif isinstance(stmt, EachBlock):
@@ -460,15 +495,28 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
         a = ExecuteCoal(stmt.a, scope)
         b = ExecuteCoal(stmt.b, scope)
 
-        # a_type = a.object_type
-        # b_type = b.object_type
-
-        # if all(a_type != t for t in ('Int', 'Float'))\
-        #    or all(b_type != t for t in ('Int', 'Float')):
-        #     throwError(0, 0, 'TypeError: Invalid types for "+": {}, {}'
-        #                      .format(a_type, b_type))
-
         expr_type = type(stmt).__name__
+
+        if expr_type == 'ExprEqual':
+            result = 'true' if a.value == b.value else 'false'
+        elif expr_type == 'ExprNotEqual':
+            result = 'false' if a.value == b.value else 'true'
+        elif expr_type == 'ExprGreater':
+            result = 'true' if a.value > b.value else 'false'
+        elif expr_type == 'ExprLess':
+            result = 'true' if a.value < b.value else 'false'
+        elif expr_type == 'ExprEqualGreater':
+            result = 'true' if a.value >= b.value else 'false'
+        elif expr_type == 'ExprEqualLess':
+            result = 'true' if a.value <= b.value else 'false'
+
+        a_type = a.object_type
+        b_type = b.object_type
+
+        if all(a_type != t for t in ('Int', 'Float'))\
+           or all(b_type != t for t in ('Int', 'Float')):
+            throwError(0, 0, 'TypeError: Invalid types for "{}": {} and {}'
+                             .format(expr_type[4:], a_type, b_type))
 
         if expr_type == 'ExprAddition':
             result = a.value + b.value
@@ -490,18 +538,6 @@ def ExecuteCoal(stmt, scope=local_scope[current_scope]):
             result = a.value >> b.value
         elif expr_type == 'ExprBitShiftL':
             result = a.value << b.value
-        elif expr_type == 'ExprEqual':
-            result = 'true' if a.value == b.value else 'false'
-        elif expr_type == 'ExprNotEqual':
-            result = 'false' if a.value == b.value else 'true'
-        elif expr_type == 'ExprGreater':
-            result = 'true' if a.value > b.value else 'false'
-        elif expr_type == 'ExprLess':
-            result = 'true' if a.value < b.value else 'false'
-        elif expr_type == 'ExprEqualGreater':
-            result = 'true' if a.value >= b.value else 'false'
-        elif expr_type == 'ExprEqualLess':
-            result = 'true' if a.value <= b.value else 'false'
 
         if type(result) == int:
             return CoalInt(result)

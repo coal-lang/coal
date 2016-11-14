@@ -91,12 +91,16 @@ class CoalObject(object):
 
 # Sub-types
 class CoalModule(CoalObject):
-    def __init__(self, name, methods):
+    def __init__(self, name, attributes={}, methods={}):
         CoalObject.__init__(self, name, None, None)
+
+        for attribute in attributes.keys():
+            self.public.append(attribute)
 
         for method in methods.keys():
             self.public.append(method)
 
+        self.attributes.update(attributes)
         self.methods.update(methods)
 
         self.repr_as['String'] = lambda: CoalString('Module({})'
@@ -362,17 +366,17 @@ class CoalString(CoalObject):
         return CoalString(self.value.lower())
 
     def _method_replace_with_(self, old, new):
-        self.value.replace(old.repr('String').value,
-                           new.repr('String').value)
+        self.value = self.value.replace(old.repr('String').value,
+                                        new.repr('String').value)
 
     def _method_replace_with_times_(self, old, new, times):
         if not isinstance(times, CoalInt):
             throwError('TypeError: String method "replace:with:times:"'
                        ' takes "times:" as "Int".')
 
-        self.value.replace(old.repr('String').value,
-                           new.repr('String').value,
-                           times.value)
+        self.value = self.value.replace(old.repr('String').value,
+                                        new.repr('String').value,
+                                        times.value)
 
     def _method_stringAfterReplacing_with_(self, old, new):
         return CoalString(self.value.replace(old.repr('String').value,
@@ -437,10 +441,14 @@ class CoalBuiltin(CoalObject):
     def __init__(self):
         super(self.__class__, self).__init__('Builtins', None, None)
 
+        sys.path.append('lib')
+
         # Standard Library
-        from lib.math import _stdlib_math
+        from stdlib_core import _stdlib_core
+        from stdlib_math import _stdlib_math
 
         self.modules = {
+            'core': _stdlib_core,
             'math': _stdlib_math
         }
 
